@@ -4,6 +4,7 @@
 #include <EventClass.h>
 #include <HouseClass.h>
 #include <Commands/AggressiveStance.h>
+#include <Ext/TechnoType/Body.h>
 
 bool EventExt::AddEvent()
 {
@@ -35,6 +36,11 @@ void EventExt::RespondToToggleAggressiveStance()
 	auto const pTechno = this->ToggleAggressiveStance.Who.As_Techno();
 
 	if (AggressiveStanceClass::AggressiveStanceMap[pTechno]) {
+		if (pTechno && TechnoTypeExt::IsAlwaysAggressiveStance(pTechno->GetTechnoType()))
+		{
+			AggressiveStanceClass::AggressiveStanceMap[pTechno] = true;
+			return;
+		}
 		AggressiveStanceClass::AggressiveStanceMap[pTechno] = false;
 		pTechno->QueueMission(Mission::Guard, true);
 		pTechno->SetTarget(nullptr);
@@ -58,8 +64,6 @@ bool EventExt::IsValidType(EventTypeExt type)
 {
 	return (type >= EventTypeExt::FIRST && type <= EventTypeExt::LAST);
 }
-
-// hooks
 
 DEFINE_HOOK(0x4C6CC8, Networking_RespondToEvent, 0x5)
 {

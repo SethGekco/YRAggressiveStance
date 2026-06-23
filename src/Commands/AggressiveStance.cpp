@@ -2,6 +2,7 @@
 #include <EventClass.h>
 #include <HouseClass.h>
 #include <Ext/Event/Body.h>
+#include <Ext/TechnoType/Body.h>   // <-- new include for TechnoTypeExt
 #include <Utilities/GeneralUtils.h>
 
 std::map<TechnoClass*, bool> AggressiveStanceClass::AggressiveStanceMap;
@@ -48,6 +49,12 @@ static inline bool CanToggleAggressiveStance(TechnoClass* pTechno) {
 			return false;
 		}
 	}
+	// Units with AggressiveStance.Always=yes are permanently locked in and
+	// must not be handed to the toggle hotkey at all.
+	if (TechnoTypeExt::IsAlwaysAggressiveStance(pTechno->GetTechnoType()))
+	{
+		return false;
+	}
 	return true;
 }
 
@@ -71,6 +78,7 @@ void AggressiveStanceClass::Execute(WWKey eInput) const
 			continue;
 
 		// If not togglable then exclude it from the iteration.
+		// CanToggleAggressiveStance now also filters out Always units.
 		if (CanToggleAggressiveStance(pTechno))
 		{
 			isAnySelectedUnitTogglable = true;
