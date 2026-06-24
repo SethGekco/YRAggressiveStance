@@ -1,6 +1,5 @@
 #include <HouseClass.h>
 #include <TechnoClass.h>
-#include <BuildingClass.h>
 #include <WeaponTypeClass.h>
 #include <ObjectClass.h>
 #include <Commands/AggressiveStance.h>
@@ -8,22 +7,43 @@
 #include <Helpers/Macro.h>
 #include <CCINIClass.h>
 
-// Read CanTarget.MaxHealth from rules INI for a given weapon type.
-// Returns 1.0 (no restriction) if the tag is absent.
-static double GetCanTargetMaxHealth(WeaponTypeClass* pWeapon)
+static bool PassesHealthThreshold(WeaponTypeClass* pWeapon, TechnoClass* pTarget)
 {
-    if (!pWeapon || !pWeapon->ID) return 1.0;
+    if (!pWeapon || !pWeapon->ID || !pTarget) return true;
     CCINIClass* pINI = CCINIClass::INI_Rules;
-    if (!pINI) return 1.0;
-    return pINI->ReadDouble(pWeapon->ID, "CanTarget.MaxHealth", 1.0);
+    if (!pINI) return true;
+    double maxHealth = pINI->ReadDouble(pWeapon->ID, "CanTarget.MaxHealth", 1.0);
+    double minHealth = pINI->ReadDouble(pWeapon->ID, "CanTarget.MinHealth", 0.0);
+    if (maxHealth >= 1.0 && minHealth <= 0.0) return true;
+    double hp = pTarget->GetHealthPercentage();
+    return (hp < maxHealth) && (hp >= minHealth);
 }
 
-static double GetCanTargetMinHealth(WeaponTypeClass* pWeapon)
+static bool PassesHouseFilter(WeaponTypeClass* pWeapon, TechnoClass* pThis, TechnoClass* pTarget)
 {
-    if (!pWeapon || !pWeapon->ID) return 0.0;
+    if (!pWeapon || !pWeapon->ID) return true;
     CCINIClass* pINI = CCINIClass::INI_Rules;
-    if (!pINI) return 0.0;
-    return pINI->ReadDouble(pWeapon->ID, "CanTarget.MinHealth", 0.0);
+    if (!pINI) return true;
+    // Read CanTargetHouses - if it contains "enemy" but target is friendly, skip this weapon
+    // We do a simple check: if target owner is allied with firer, and weapon has enemy-only filter
+    // Use vanilla relationship check
+    if (!pThis->Owner || !pTarget->Owner) return true;
+    // Read raw value - "enemy" means allies/owner not allowed
+    char buf[64] = {};
+    pINI->ReadString(pWeapon->ID, "CanTargetHouses", "all", buf, sizeof(buf));
+    // If "enemy" is specified and target is friendly/allied, this weapon can't fire
+    if (_stricmp(buf, "enemy") == 0 || _stricmp(buf, "enemies") == 0)
+    {
+        if (pThis->Owner->IsAlliedWith(pTarget->Owner))
+            return false;
+    }
+    // If "allies" or "owner" and target is enemy, skip
+    if (_stricmp(buf, "allies") == 0 || _stricmp(buf, "ally") == 0 || _stricmp(buf, "owner") == 0)
+    {
+        if (!pThis->Owner->IsAlliedWith(pTarget->Owner))
+            return false;
+    }
+    return true;
 }
 
 DEFINE_HOOK(0x6F858F, TechnoClass_EvaluateObject_AggressiveStance, 0x7)
@@ -41,33 +61,27 @@ DEFINE_HOOK(0x6F858F, TechnoClass_EvaluateObject_AggressiveStance, 0x7)
 
         if (isAggressive)
         {
-            // Honor CanTarget.MaxHealth / CanTarget.MinHealth on both weapons
-            // Use the same health ratio method Phobos uses: GetHealthPercentage()
-            auto pType = pThis->GetTechnoType();
-            if (pType)
+            // Find a weapon that both passes house filter AND health threshold for this target
+            bool anyWeaponCanFire = false;
+            for (int i = 0; i < 2; i++)
             {
-                // Check primary then secondary weapon
-                for (int i = 0; i < 2; i++)
-                {
-                    auto pWeaponStruct = pThis->GetWeapon(i);
-                    if (!pWeaponStruct || !pWeaponStruct->WeaponType)
-                        continue;
+                auto pWeaponStruct = pThis->GetWeapon(i);
+                if (!pWeaponStruct || !pWeaponStruct->WeaponType) continue;
 
-                    WeaponTypeClass* pWeapon = pWeaponStruct->WeaponType;
-                    double maxHealth = GetCanTargetMaxHealth(pWeapon);
-                    double minHealth = GetCanTargetMinHealth(pWeapon);
+                WeaponTypeClass* pWeapon = pWeaponStruct->WeaponType;
 
-                    if (maxHealth < 1.0 || minHealth > 0.0)
-                    {
-                        double hp = pTarget->GetHealthPercentage();
-                        if (hp >= maxHealth || hp < minHealth)
-                            return 0; // target health outside threshold, skip
-                    }
+                // Skip weapons that can't target this house relationship
+                if (!PassesHouseFilter(pWeapon, pThis, pTarget)) continue;
 
-                    // First weapon with a health filter we found is authoritative
-                    break;
-                }
+                // Skip weapons where target health is out of range
+                if (!PassesHealthThreshold(pWeapon, pTarget)) continue;
+
+                anyWeaponCanFire = true;
+                break;
             }
+
+            if (!anyWeaponCanFire)
+                return 0;
 
             return 0x6F88BF;
         }
