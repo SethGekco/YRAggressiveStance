@@ -18,6 +18,15 @@ jobs:
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
 
+     - name: Install ATL
+        shell: pwsh
+        run: |
+          $vsPath = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath
+          $atlSrc = "$vsPath\VC\Tools\MSVC\14.29.30133\atlmfc\include"
+          $vcInc  = "$vsPath\VC\Tools\MSVC\14.29.30133\include"
+          if (Test-Path $atlSrc) { Copy-Item "$atlSrc\atlbase.h" "$vcInc\" -Force }
+          else { Write-Error "ATL source not found at $atlSrc" }
+
       - name: Build
         run: msbuild YRAggressiveStance.sln /p:Configuration=DevBuild /p:Platform=x86
 
