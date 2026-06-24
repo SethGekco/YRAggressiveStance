@@ -1,72 +1,42 @@
 #include "Body.h"
 
 #include <Helpers/Macro.h>
-#include <TechnoTypeClass.h>
 #include <TechnoClass.h>
+#include <TechnoTypeClass.h>
 #include <CCINIClass.h>
-#include <Utilities/Parser.h>
-
-// ---------------------------------------------------------------------------
-// Static member definitions
-// ---------------------------------------------------------------------------
+#include <RulesClass.h>
+#include <Commands/AggressiveStance.h>
 
 std::map<TechnoTypeClass*, bool> TechnoTypeExt::AggressiveStanceAlwaysMap;
 
 bool TechnoTypeExt::IsAlwaysAggressiveStance(TechnoTypeClass* pType)
 {
-    auto it = AggressiveStanceAlwaysMap.find(pType);
-    return (it != AggressiveStanceAlwaysMap.end()) && it->second;
-}
+    auto it = TechnoTypeExt::AggressiveStanceAlwaysMap.find(pType);
+    if (it != TechnoTypeExt::AggressiveStanceAlwaysMap.end())
+        return it->second;
 
-// ---------------------------------------------------------------------------
-// Hook: TechnoTypeClass::LoadFromINI  (0x7162A0)
-//
-// This virtual is called once per TechnoType section when rules/art INI files
-// are loaded.  EDI holds the TechnoTypeClass* and ESI holds the CCINIClass*.
-// We append our own read after the vanilla processing completes.
-//
-// Size stolen: 0x5 bytes (PUSH EBP; MOV EBP,ESP at function entry –
-// the hook jumps in at the very top and lets Syringe put the trampoline back).
-// ---------------------------------------------------------------------------
-
-DEFINE_HOOK(0x7162A0, TechnoTypeClass_LoadFromINI_AggressiveStanceAlways, 0x5)
-{
-    GET(TechnoTypeClass*, pThis, EDI);
-    GET(CCINIClass*,      pINI,  ESI);
-
-    const char* pSection = pThis->ID;
-
-    bool value = false;
-    // ReadBool(section, key, default) – returns the default when the key is absent,
-    // so this is safe for types that never set the tag.
-    value = pINI->ReadBool(pSection, "AggressiveStance.Always", false);
-
-    if (value)
+    // Not cached yet - read from RulesIni now and cache it
+    CCINIClass* pINI = CCINIClass::INI_Rules;
+    if (pINI && pType && pType->ID)
     {
-        TechnoTypeExt::AggressiveStanceAlwaysMap[pThis] = true;
+        bool val = pINI->ReadBool(pType->ID, "AggressiveStance.Always", false);
+        TechnoTypeExt::AggressiveStanceAlwaysMap[pType] = val;
+        return val;
     }
-    // No need to store false entries – absence from the map is treated as false.
 
-    return 0;   // continue into the vanilla function body
+    TechnoTypeExt::AggressiveStanceAlwaysMap[pType] = false;
+    return false;
 }
 
-// ---------------------------------------------------------------------------
-// Hook: TechnoClass::Init  (0x6F42F0)
-//
-// Called when a TechnoClass instance is placed on the map for the first time.
-// EDI holds the TechnoClass*.  If its type has AggressiveStance.Always=yes,
-// we pre-populate AggressiveStanceMap so the target-evaluation hook fires
-// immediately without any player input.
-//
-// We must include AggressiveStance.h here because we write into
-// AggressiveStanceClass::AggressiveStanceMap directly.
-// ---------------------------------------------------------------------------
+// Hook: TechnoClass::Put (0x70D0D0)
+// Fires when a unit is placed on the map.
+// ESI = TechnoClass* (thiscall via PUSH ESI; MOV ESI,ECX pattern - ECX = this)
+// Actually: 53 56 8B F1 = PUSH EBX; PUSH ESI; MOV ESI,ECX so ECX has this at entry
+// We steal 6 bytes: 53 56 8B F1 57 8D
 
-#include <Commands/AggressiveStance.h>
-
-DEFINE_HOOK(0x6F42F0, TechnoClass_Init_AggressiveStanceAlways, 0x6)
+DEFINE_HOOK(0x70D0D0, TechnoClass_Put_AggressiveStanceAlways, 0x6)
 {
-    GET(TechnoClass*, pThis, ESI);
+    GET(TechnoClass*, pThis, ECX);
 
     if (pThis)
     {
@@ -77,5 +47,5 @@ DEFINE_HOOK(0x6F42F0, TechnoClass_Init_AggressiveStanceAlways, 0x6)
         }
     }
 
-    return 0;   // continue into vanilla Init body
+    return 0;
 }
