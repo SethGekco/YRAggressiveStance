@@ -20,10 +20,10 @@ jobs:
       - name: Install ATL
         shell: pwsh
         run: |
-          $src = "C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Tools\MSVC\14.51.36231\atlmfc\include\atlbase.h"
-          $dst = "C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Tools\MSVC\14.29.30133\include\"
-          Write-Host "Copying $src to $dst"
-          Copy-Item $src $dst -Force
+          $src = "C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Tools\MSVC\14.51.36231\atlmfc\include"
+          $dst = "C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Tools\MSVC\14.29.30133\include"
+          Write-Host "Copying all ATL headers from $src to $dst"
+          Copy-Item "$src\*" $dst -Force
           Write-Host "Done"
 
       - name: Build
