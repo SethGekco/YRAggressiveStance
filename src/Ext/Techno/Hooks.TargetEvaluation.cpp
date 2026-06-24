@@ -1,34 +1,29 @@
 #include <HouseClass.h>
 #include <TechnoClass.h>
+#include <BuildingClass.h>
 #include <WeaponTypeClass.h>
-#include <WarheadTypeClass.h>
+#include <ObjectClass.h>
 #include <Commands/AggressiveStance.h>
 #include <Ext/TechnoType/Body.h>
 #include <Helpers/Macro.h>
 #include <CCINIClass.h>
 
-// Returns the best weapon index (0=primary, 1=secondary) that can target pTarget,
-// or -1 if neither can. Used to look up CanTarget.MaxHealth for the firing weapon.
-static int GetBestWeaponIndex(TechnoClass* pThis, TechnoClass* pTarget)
+// Read CanTarget.MaxHealth from rules INI for a given weapon type.
+// Returns 1.0 (no restriction) if the tag is absent.
+static double GetCanTargetMaxHealth(WeaponTypeClass* pWeapon)
 {
-    if (!pThis || !pTarget) return -1;
-    auto pType = pThis->GetTechnoType();
-    if (!pType) return -1;
-    if (pType->Weapon[0].WeaponType) return 0;
-    if (pType->Weapon[1].WeaponType) return 1;
-    return -1;
+    if (!pWeapon || !pWeapon->ID) return 1.0;
+    CCINIClass* pINI = CCINIClass::INI_Rules;
+    if (!pINI) return 1.0;
+    return pINI->ReadDouble(pWeapon->ID, "CanTarget.MaxHealth", 1.0);
 }
 
-// Read CanTarget.MaxHealth from Phobos INI for a given weapon type.
-// Returns 1.0 (no restriction) if the tag is absent.
-static float GetCanTargetMaxHealth(WeaponTypeClass* pWeapon)
+static double GetCanTargetMinHealth(WeaponTypeClass* pWeapon)
 {
-    if (!pWeapon || !pWeapon->ID) return 1.0f;
+    if (!pWeapon || !pWeapon->ID) return 0.0;
     CCINIClass* pINI = CCINIClass::INI_Rules;
-    if (!pINI) return 1.0f;
-    // ReadFloat(section, key, default)
-    double val = pINI->ReadDouble(pWeapon->ID, "CanTarget.MaxHealth", 1.0);
-    return static_cast<float>(val);
+    if (!pINI) return 0.0;
+    return pINI->ReadDouble(pWeapon->ID, "CanTarget.MinHealth", 0.0);
 }
 
 DEFINE_HOOK(0x6F858F, TechnoClass_EvaluateObject_AggressiveStance, 0x7)
@@ -46,32 +41,31 @@ DEFINE_HOOK(0x6F858F, TechnoClass_EvaluateObject_AggressiveStance, 0x7)
 
         if (isAggressive)
         {
-            // Honor CanTarget.MaxHealth - check against primary weapon
+            // Honor CanTarget.MaxHealth / CanTarget.MinHealth on both weapons
+            // Use the same health ratio method Phobos uses: GetHealthPercentage()
             auto pType = pThis->GetTechnoType();
             if (pType)
             {
-                WeaponTypeClass* pWeapon = nullptr;
-                if (pType->Weapon[0].WeaponType)
-                    pWeapon = pType->Weapon[0].WeaponType;
-                else if (pType->Weapon[1].WeaponType)
-                    pWeapon = pType->Weapon[1].WeaponType;
-
-                if (pWeapon)
+                // Check primary then secondary weapon
+                for (int i = 0; i < 2; i++)
                 {
-                    float maxHealth = GetCanTargetMaxHealth(pWeapon);
-                    if (maxHealth < 1.0f)
+                    auto pWeaponStruct = pThis->GetWeapon(i);
+                    if (!pWeaponStruct || !pWeaponStruct->WeaponType)
+                        continue;
+
+                    WeaponTypeClass* pWeapon = pWeaponStruct->WeaponType;
+                    double maxHealth = GetCanTargetMaxHealth(pWeapon);
+                    double minHealth = GetCanTargetMinHealth(pWeapon);
+
+                    if (maxHealth < 1.0 || minHealth > 0.0)
                     {
-                        // Check target health ratio
-                        int maxHP = pTarget->GetTechnoType()
-                            ? pTarget->GetTechnoType()->Strength : 1;
-                        if (maxHP > 0)
-                        {
-                            float healthRatio = static_cast<float>(pTarget->Health)
-                                / static_cast<float>(maxHP);
-                            if (healthRatio >= maxHealth)
-                                return 0; // target too healthy, skip
-                        }
+                        double hp = pTarget->GetHealthPercentage();
+                        if (hp >= maxHealth || hp < minHealth)
+                            return 0; // target health outside threshold, skip
                     }
+
+                    // First weapon with a health filter we found is authoritative
+                    break;
                 }
             }
 
