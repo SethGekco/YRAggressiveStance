@@ -21,8 +21,12 @@ jobs:
         shell: pwsh
         run: |
           $vsPath = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath
-          $atlSrc = "$vsPath\VC\Tools\MSVC\14.29.30133\atlmfc\include"
-          $vcInc  = "$vsPath\VC\Tools\MSVC\14.29.30133\include"
+          $msvcRoot = "$vsPath\VC\Tools\MSVC"
+          $msvcVer = (Get-ChildItem $msvcRoot | Sort-Object Name -Descending | Select-Object -First 1).Name
+          Write-Host "Found MSVC version: $msvcVer"
+          $atlSrc = "$msvcRoot\$msvcVer\atlmfc\include"
+          $vcInc  = "$msvcRoot\$msvcVer\include"
+          Write-Host "ATL source: $atlSrc"
           if (Test-Path $atlSrc) { Copy-Item "$atlSrc\atlbase.h" "$vcInc\" -Force }
           else { Write-Error "ATL source not found at $atlSrc" }
 
