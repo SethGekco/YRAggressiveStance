@@ -20,17 +20,11 @@ jobs:
       - name: Install ATL
         shell: pwsh
         run: |
-          $atlFile = Get-ChildItem -Path "C:\Program Files\Microsoft Visual Studio" -Recurse -Filter "atlbase.h" -ErrorAction SilentlyContinue | Select-Object -First 1
-          if ($atlFile) {
-            Write-Host "Found atlbase.h at: $($atlFile.FullName)"
-            $clExe = Get-ChildItem -Path "C:\Program Files\Microsoft Visual Studio" -Recurse -Filter "cl.exe" -ErrorAction SilentlyContinue | Where-Object { $_.FullName -like "*HostX86\x86*" } | Select-Object -First 1
-            Write-Host "Found cl.exe at: $($clExe.FullName)"
-            $msvcInc = Join-Path (Split-Path (Split-Path (Split-Path $clExe.FullName))) "include"
-            Write-Host "Copying to: $msvcInc"
-            Copy-Item $atlFile.FullName "$msvcInc\" -Force
-          } else {
-            Write-Error "atlbase.h not found anywhere"
-          }
+          $src = "C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Tools\MSVC\14.51.36231\atlmfc\include\atlbase.h"
+          $dst = "C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Tools\MSVC\14.29.30133\include\"
+          Write-Host "Copying $src to $dst"
+          Copy-Item $src $dst -Force
+          Write-Host "Done"
 
       - name: Build
         run: msbuild YRAggressiveStance.sln /p:Configuration=DevBuild /p:Platform=x86
