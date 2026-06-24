@@ -20,15 +20,17 @@ jobs:
       - name: Install ATL
         shell: pwsh
         run: |
-          $vsPath = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath
-          $msvcRoot = "$vsPath\VC\Tools\MSVC"
-          $msvcVer = (Get-ChildItem $msvcRoot | Sort-Object Name -Descending | Select-Object -First 1).Name
-          Write-Host "Found MSVC version: $msvcVer"
-          $atlSrc = "$msvcRoot\$msvcVer\atlmfc\include"
-          $vcInc  = "$msvcRoot\$msvcVer\include"
-          Write-Host "ATL source: $atlSrc"
-          if (Test-Path $atlSrc) { Copy-Item "$atlSrc\atlbase.h" "$vcInc\" -Force }
-          else { Write-Error "ATL source not found at $atlSrc" }
+          $atlFile = Get-ChildItem -Path "C:\Program Files\Microsoft Visual Studio" -Recurse -Filter "atlbase.h" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($atlFile) {
+            Write-Host "Found atlbase.h at: $($atlFile.FullName)"
+            $clExe = Get-ChildItem -Path "C:\Program Files\Microsoft Visual Studio" -Recurse -Filter "cl.exe" -ErrorAction SilentlyContinue | Where-Object { $_.FullName -like "*HostX86\x86*" } | Select-Object -First 1
+            Write-Host "Found cl.exe at: $($clExe.FullName)"
+            $msvcInc = Join-Path (Split-Path (Split-Path (Split-Path $clExe.FullName))) "include"
+            Write-Host "Copying to: $msvcInc"
+            Copy-Item $atlFile.FullName "$msvcInc\" -Force
+          } else {
+            Write-Error "atlbase.h not found anywhere"
+          }
 
       - name: Build
         run: msbuild YRAggressiveStance.sln /p:Configuration=DevBuild /p:Platform=x86
