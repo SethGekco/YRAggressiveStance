@@ -20,11 +20,11 @@ jobs:
       - name: Install ATL
         shell: pwsh
         run: |
-          $src = "C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Tools\MSVC\14.51.36231\atlmfc\include"
-          $dst = "C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Tools\MSVC\14.29.30133\include"
-          Write-Host "Copying all ATL headers from $src to $dst"
-          Copy-Item "$src\*" $dst -Force
-          Write-Host "Done"
+          $src14 = "C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Tools\MSVC\14.51.36231"
+          $dst14 = "C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Tools\MSVC\14.29.30133"
+          Copy-Item "$src14\atlmfc\include\*" "$dst14\include\" -Force
+          Copy-Item "$src14\atlmfc\lib\x86\atls.lib" "$dst14\lib\x86\" -Force
+          Write-Host "ATL headers and atls.lib copied"
 
       - name: Build
         run: msbuild YRAggressiveStance.sln /p:Configuration=DevBuild /p:Platform=x86
