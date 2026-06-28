@@ -10,7 +10,6 @@
 
 // ---------------------------------------------------------------------------
 // Per-weapon cache for CanTarget.MaxHealth / CanTarget.MinHealth.
-// Read once from INI on first encounter. Default: max=1.0, min=0.0 (no filter).
 // ---------------------------------------------------------------------------
 
 struct WeaponHealthFilter
@@ -42,7 +41,6 @@ static const WeaponHealthFilter& GetWeaponHealthFilter(WeaponTypeClass* pWeapon)
     return WeaponHealthFilterCache.emplace(pWeapon, filter).first->second;
 }
 
-// Returns true if pTarget's health passes the weapon's health filter.
 static bool PassesHealthFilter(WeaponTypeClass* pWeapon, TechnoClass* pTarget)
 {
     if (!pWeapon || !pTarget) return true;
@@ -52,8 +50,6 @@ static bool PassesHealthFilter(WeaponTypeClass* pWeapon, TechnoClass* pTarget)
     return (hp < filter.MaxHealth) && (hp >= filter.MinHealth);
 }
 
-// Returns true if the weapon can target this house relationship.
-// Reads CanTargetHouses from INI - handles common values only.
 static bool PassesHouseFilter(WeaponTypeClass* pWeapon, TechnoClass* pThis, TechnoClass* pTarget)
 {
     if (!pWeapon || !pWeapon->ID || !pThis->Owner || !pTarget->Owner) return true;
@@ -70,14 +66,34 @@ static bool PassesHouseFilter(WeaponTypeClass* pWeapon, TechnoClass* pThis, Tech
     return true;
 }
 
+static bool IsAggressiveStance(TechnoClass* pThis)
+{
+    return AggressiveStanceClass::AggressiveStanceMap[pThis]
+        || TechnoTypeExt::IsAlwaysAggressiveStance(pThis->GetTechnoType())
+        || (pThis->Transporter && (AggressiveStanceClass::AggressiveStanceMap[pThis->Transporter]
+            || TechnoTypeExt::IsAlwaysAggressiveStance(pThis->Transporter->GetTechnoType())));
+}
+
+static bool AnyWeaponCanTarget(TechnoClass* pThis, TechnoClass* pTarget)
+{
+    for (int i = 0; i < 2; i++)
+    {
+        auto pWeaponStruct = pThis->GetWeapon(i);
+        if (!pWeaponStruct || !pWeaponStruct->WeaponType) continue;
+        WeaponTypeClass* pWeapon = pWeaponStruct->WeaponType;
+        if (!PassesHouseFilter(pWeapon, pThis, pTarget)) continue;
+        if (!PassesHealthFilter(pWeapon, pTarget)) continue;
+        return true;
+    }
+    return false;
+}
+
 // ---------------------------------------------------------------------------
-// Hook 1: 0x6F858F - Unarmed building gate (AggressiveStance bypass)
-// Fires when vanilla would deny a building because it has ThreatPosed=0.
-// We allow it through if the unit is in aggressive stance AND a weapon
-// passes both house and health filters for this target.
+// Hook 1: 0x6F858F - Unarmed BUILDING gate (ThreatPosed=0 buildings)
+// Stolen bytes: 85 FF 74 18 8A 47 14 (7 bytes)
 // ---------------------------------------------------------------------------
 
-DEFINE_HOOK(0x6F858F, TechnoClass_EvaluateObject_AggressiveStance, 0x7)
+DEFINE_HOOK(0x6F858F, TechnoClass_EvaluateObject_AggressiveStance_Buildings, 0x7)
 {
     GET(TechnoClass*, pThis, EDI);
     GET(TechnoClass*, pTarget, ESI);
@@ -85,35 +101,44 @@ DEFINE_HOOK(0x6F858F, TechnoClass_EvaluateObject_AggressiveStance, 0x7)
     if (pThis && pThis->Owner->IsControlledByHuman()
         && pTarget && pTarget->WhatAmI() == AbstractType::Building)
     {
-        bool isAggressive = AggressiveStanceClass::AggressiveStanceMap[pThis]
-            || TechnoTypeExt::IsAlwaysAggressiveStance(pThis->GetTechnoType())
-            || (pThis->Transporter && (AggressiveStanceClass::AggressiveStanceMap[pThis->Transporter]
-                || TechnoTypeExt::IsAlwaysAggressiveStance(pThis->Transporter->GetTechnoType())));
-
-        if (isAggressive)
-        {
-            for (int i = 0; i < 2; i++)
-            {
-                auto pWeaponStruct = pThis->GetWeapon(i);
-                if (!pWeaponStruct || !pWeaponStruct->WeaponType) continue;
-                WeaponTypeClass* pWeapon = pWeaponStruct->WeaponType;
-                if (!PassesHouseFilter(pWeapon, pThis, pTarget)) continue;
-                if (!PassesHealthFilter(pWeapon, pTarget)) continue;
-                return 0x6F88BF;
-            }
-        }
+        if (IsAggressiveStance(pThis) && AnyWeaponCanTarget(pThis, pTarget))
+            return 0x6F88BF;
     }
     return 0;
 }
 
 // ---------------------------------------------------------------------------
-// Hook 2: 0x6F8604 - CanTarget allow point (all buildings)
-// This is where ALL buildings end up when EvaluateObject considers them valid,
-// including armed ones with ThreatPosed > 0 that never hit hook 1.
-// We enforce CanTarget.MaxHealth / CanTarget.MinHealth here for any building
-// target, since Phobos's CanFire hook does not enforce these for buildings.
-// pThis = EDI, pTarget = ESI (same as hook 1).
-// Stolen bytes: 8A 44 24 13 84 C0 (6 bytes).
+// Hook 2: 0x6F8503 - ThreatPosed=0 gate for NON-BUILDING targets
+// Context: SUB EAX,ECX / TEST EAX,EAX / JE->deny
+// If aggressive stance, skip both deny checks by jumping to 0x6F851C.
+// Stolen bytes: 2B C1 85 C0 0F 84 (6 bytes)
+// ---------------------------------------------------------------------------
+
+DEFINE_HOOK(0x6F8503, TechnoClass_EvaluateObject_AggressiveStance_Units, 0x6)
+{
+    enum { SkipDeny = 0x6F851C };
+
+    GET(TechnoClass*, pThis, EDI);
+    GET(TechnoClass*, pTarget, ESI);
+
+    if (pThis && pThis->Owner->IsControlledByHuman()
+        && pTarget && pTarget->WhatAmI() != AbstractType::Building)
+    {
+        if (IsAggressiveStance(pThis) && AnyWeaponCanTarget(pThis, pTarget))
+            return SkipDeny;
+    }
+
+    // Not aggressive or target is a building - execute stolen bytes normally
+    // SUB EAX, ECX then TEST EAX, EAX
+    // We can't reproduce the original arithmetic here so let the trampoline handle it
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// Hook 3: 0x6F8604 - CanTarget allow point (ALL buildings, armed and unarmed)
+// Enforces CanTarget.MaxHealth/MinHealth for buildings since Phobos CanFire
+// does not enforce these tags for BuildingClass targets.
+// Stolen bytes: 8A 44 24 13 84 C0 (6 bytes)
 // ---------------------------------------------------------------------------
 
 DEFINE_HOOK(0x6F8604, TechnoClass_EvaluateObject_BuildingHealthFilter, 0x6)
@@ -125,21 +150,7 @@ DEFINE_HOOK(0x6F8604, TechnoClass_EvaluateObject_BuildingHealthFilter, 0x6)
 
     if (pThis && pTarget && pTarget->WhatAmI() == AbstractType::Building)
     {
-        // Find the weapon that would fire at this target and check its health filter.
-        // If no weapon can fire (all filtered), deny the target.
-        bool anyWeaponPasses = false;
-        for (int i = 0; i < 2; i++)
-        {
-            auto pWeaponStruct = pThis->GetWeapon(i);
-            if (!pWeaponStruct || !pWeaponStruct->WeaponType) continue;
-            WeaponTypeClass* pWeapon = pWeaponStruct->WeaponType;
-            if (!PassesHouseFilter(pWeapon, pThis, pTarget)) continue;
-            if (!PassesHealthFilter(pWeapon, pTarget)) continue;
-            anyWeaponPasses = true;
-            break;
-        }
-
-        if (!anyWeaponPasses)
+        if (!AnyWeaponCanTarget(pThis, pTarget))
             return Deny;
     }
 
