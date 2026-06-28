@@ -8,10 +8,6 @@
 #include <Helpers/Macro.h>
 #include <map>
 
-// ---------------------------------------------------------------------------
-// Per-weapon cache for CanTarget.MaxHealth / CanTarget.MinHealth.
-// ---------------------------------------------------------------------------
-
 struct WeaponHealthFilter
 {
     double MaxHealth { 1.0 };
@@ -89,7 +85,7 @@ static bool AnyWeaponCanTarget(TechnoClass* pThis, TechnoClass* pTarget)
 }
 
 // ---------------------------------------------------------------------------
-// Hook 1: 0x6F858F - Unarmed BUILDING gate (ThreatPosed=0 buildings)
+// Hook 1: 0x6F858F - ThreatPosed=0 BUILDING gate (AggressiveStance bypass)
 // Stolen bytes: 85 FF 74 18 8A 47 14 (7 bytes)
 // ---------------------------------------------------------------------------
 
@@ -108,10 +104,10 @@ DEFINE_HOOK(0x6F858F, TechnoClass_EvaluateObject_AggressiveStance_Buildings, 0x7
 }
 
 // ---------------------------------------------------------------------------
-// Hook 2: 0x6F8503 - ThreatPosed=0 gate for NON-BUILDING targets
-// Context: SUB EAX,ECX / TEST EAX,EAX / JE->deny
-// If aggressive stance, skip both deny checks by jumping to 0x6F851C.
+// Hook 2: 0x6F8503 - ThreatPosed=0 gate for NON-BUILDING/NON-VEHICLE targets
+// Context: SUB EAX,ECX / TEST EAX,EAX / JE deny
 // Stolen bytes: 2B C1 85 C0 0F 84 (6 bytes)
+// If aggressive stance, jump to 0x6F851C to skip both deny checks.
 // ---------------------------------------------------------------------------
 
 DEFINE_HOOK(0x6F8503, TechnoClass_EvaluateObject_AggressiveStance_Units, 0x6)
@@ -128,14 +124,11 @@ DEFINE_HOOK(0x6F8503, TechnoClass_EvaluateObject_AggressiveStance_Units, 0x6)
             return SkipDeny;
     }
 
-    // Not aggressive or target is a building - execute stolen bytes normally
-    // SUB EAX, ECX then TEST EAX, EAX
-    // We can't reproduce the original arithmetic here so let the trampoline handle it
     return 0;
 }
 
 // ---------------------------------------------------------------------------
-// Hook 3: 0x6F8604 - CanTarget allow point (ALL buildings, armed and unarmed)
+// Hook 3: 0x6F8604 - CanTarget allow point for ALL buildings (armed + unarmed)
 // Enforces CanTarget.MaxHealth/MinHealth for buildings since Phobos CanFire
 // does not enforce these tags for BuildingClass targets.
 // Stolen bytes: 8A 44 24 13 84 C0 (6 bytes)
@@ -152,6 +145,30 @@ DEFINE_HOOK(0x6F8604, TechnoClass_EvaluateObject_BuildingHealthFilter, 0x6)
     {
         if (!AnyWeaponCanTarget(pThis, pTarget))
             return Deny;
+    }
+
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// Hook 4: 0x6F84A9 - ThreatPosed gate for VEHICLE targets (UnitClass=0xF)
+// Context: TEST CL,CL / JNZ deny - CL is ThreatPosed-derived bool for units
+// If aggressive stance, skip to 0x6F84B1 (past the deny jump).
+// Stolen bytes: 84 C9 0F 85 9E 04 (6 bytes)
+// ---------------------------------------------------------------------------
+
+DEFINE_HOOK(0x6F84A9, TechnoClass_EvaluateObject_AggressiveStance_Vehicles, 0x6)
+{
+    enum { SkipDeny = 0x6F84B1 };
+
+    GET(TechnoClass*, pThis, EDI);
+    GET(TechnoClass*, pTarget, ESI);
+
+    if (pThis && pThis->Owner->IsControlledByHuman()
+        && pTarget && pTarget->WhatAmI() == AbstractType::Unit)
+    {
+        if (IsAggressiveStance(pThis) && AnyWeaponCanTarget(pThis, pTarget))
+            return SkipDeny;
     }
 
     return 0;
