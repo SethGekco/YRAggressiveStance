@@ -198,3 +198,29 @@ DEFINE_HOOK(0x6F84B1, TechnoClass_EvaluateObject_VehicleHealthFilter, 0x6)
 
     return 0;
 }
+
+// ---------------------------------------------------------------------------
+// Hook 6: 0x6F851C - Health filter for INFANTRY, AIRCRAFT, and other non-
+// building/non-vehicle targets. This is the convergence point after the
+// generic ThreatPosed gate (0x6F8503/0x6F8516) for all remaining types.
+// EDI=pThis, ESI=pTarget still valid here.
+// Stolen bytes: A1 30 B2 A8 00 6A (6 bytes) = MOV EAX,[0xA8B230] / PUSH
+// ---------------------------------------------------------------------------
+
+DEFINE_HOOK(0x6F851C, TechnoClass_EvaluateObject_OtherHealthFilter, 0x6)
+{
+    enum { Deny = 0x6F894F };
+
+    GET(TechnoClass*, pThis, EDI);
+    GET(TechnoClass*, pTarget, ESI);
+
+    if (pThis && pTarget
+        && pTarget->WhatAmI() != AbstractType::Building
+        && pTarget->WhatAmI() != AbstractType::Unit)
+    {
+        if (!AnyWeaponCanTarget(pThis, pTarget))
+            return Deny;
+    }
+
+    return 0;
+}
