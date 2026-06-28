@@ -173,3 +173,28 @@ DEFINE_HOOK(0x6F84A9, TechnoClass_EvaluateObject_AggressiveStance_Vehicles, 0x6)
 
     return 0;
 }
+
+// ---------------------------------------------------------------------------
+// Hook 5: 0x6F84B1 - Vehicle path health filter
+// Fires immediately after the vehicle ThreatPosed deny is skipped (or passed).
+// EDI=pThis, ESI=pTarget still valid here.
+// Enforces CanTarget.MaxHealth/MinHealth for vehicle targets since Phobos
+// CanFire hook does not enforce these for non-TechnoClass cast targets.
+// Stolen bytes: 8B 87 1C 02 00 00 (6 bytes) = MOV EAX,[EDI+0x21C]
+// ---------------------------------------------------------------------------
+
+DEFINE_HOOK(0x6F84B1, TechnoClass_EvaluateObject_VehicleHealthFilter, 0x6)
+{
+    enum { Deny = 0x6F894F };
+
+    GET(TechnoClass*, pThis, EDI);
+    GET(TechnoClass*, pTarget, ESI);
+
+    if (pThis && pTarget && pTarget->WhatAmI() == AbstractType::Unit)
+    {
+        if (!AnyWeaponCanTarget(pThis, pTarget))
+            return Deny;
+    }
+
+    return 0;
+}
