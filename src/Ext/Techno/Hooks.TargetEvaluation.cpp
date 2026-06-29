@@ -8,6 +8,10 @@
 #include <Helpers/Macro.h>
 #include <map>
 
+// ---------------------------------------------------------------------------
+// Per-weapon cache for CanTarget.MaxHealth / CanTarget.MinHealth.
+// ---------------------------------------------------------------------------
+
 struct WeaponHealthFilter
 {
     double MaxHealth { 1.0 };
@@ -24,7 +28,7 @@ static const WeaponHealthFilter& GetWeaponHealthFilter(WeaponTypeClass* pWeapon)
         return it->second;
 
     WeaponHealthFilter filter;
-    if (CCINIClass* pINI = CCINIClass::INI_Rules)
+    if (auto* pINI = CCINIClass::INI_Rules)
     {
         if (pWeapon && pWeapon->ID)
         {
@@ -49,7 +53,7 @@ static bool PassesHealthFilter(WeaponTypeClass* pWeapon, TechnoClass* pTarget)
 static bool PassesHouseFilter(WeaponTypeClass* pWeapon, TechnoClass* pThis, TechnoClass* pTarget)
 {
     if (!pWeapon || !pWeapon->ID || !pThis->Owner || !pTarget->Owner) return true;
-    CCINIClass* pINI = CCINIClass::INI_Rules;
+    auto* pINI = CCINIClass::INI_Rules;
     if (!pINI) return true;
     char buf[32] = {};
     pINI->ReadString(pWeapon->ID, "CanTargetHouses", "all", buf, sizeof(buf));
@@ -62,12 +66,39 @@ static bool PassesHouseFilter(WeaponTypeClass* pWeapon, TechnoClass* pThis, Tech
     return true;
 }
 
+// Returns true if pThis is in aggressive stance for any reason:
+//   - Human player toggled via hotkey (AggressiveStanceMap entry = true)
+//   - TechnoType has AggressiveStance.Always=yes
+//   - TeamType has AggressiveStance=yes (AI and human teams, seeded by
+//     TeamClass::AddMember hook in Ext/TeamType/Body.cpp)
+//   - Transporter has any of the above
 static bool IsAggressiveStance(TechnoClass* pThis)
 {
-    return AggressiveStanceClass::AggressiveStanceMap[pThis]
-        || TechnoTypeExt::IsAlwaysAggressiveStance(pThis->GetTechnoType())
-        || (pThis->Transporter && (AggressiveStanceClass::AggressiveStanceMap[pThis->Transporter]
-            || TechnoTypeExt::IsAlwaysAggressiveStance(pThis->Transporter->GetTechnoType())));
+    if (!pThis) return false;
+
+    if (AggressiveStanceClass::AggressiveStanceMap[pThis])
+        return true;
+    if (TechnoTypeExt::IsAlwaysAggressiveStance(pThis->GetTechnoType()))
+        return true;
+
+    if (pThis->Transporter)
+    {
+        if (AggressiveStanceClass::AggressiveStanceMap[pThis->Transporter])
+            return true;
+        if (TechnoTypeExt::IsAlwaysAggressiveStance(pThis->Transporter->GetTechnoType()))
+            return true;
+    }
+
+    return false;
+}
+
+// Returns true if pTarget has AggressiveStance.Exempt=yes — meaning it should
+// never be targeted via the aggressive stance ThreatPosed=0 bypass.
+// Vanilla targeting for these types is unaffected.
+static bool IsExemptTarget(TechnoClass* pTarget)
+{
+    if (!pTarget) return false;
+    return TechnoTypeExt::IsExemptFromAggressiveStance(pTarget->GetTechnoType());
 }
 
 static bool AnyWeaponCanTarget(TechnoClass* pThis, TechnoClass* pTarget)
@@ -76,7 +107,7 @@ static bool AnyWeaponCanTarget(TechnoClass* pThis, TechnoClass* pTarget)
     {
         auto pWeaponStruct = pThis->GetWeapon(i);
         if (!pWeaponStruct || !pWeaponStruct->WeaponType) continue;
-        WeaponTypeClass* pWeapon = pWeaponStruct->WeaponType;
+        auto* pWeapon = pWeaponStruct->WeaponType;
         if (!PassesHouseFilter(pWeapon, pThis, pTarget)) continue;
         if (!PassesHealthFilter(pWeapon, pTarget)) continue;
         return true;
@@ -86,6 +117,7 @@ static bool AnyWeaponCanTarget(TechnoClass* pThis, TechnoClass* pTarget)
 
 // ---------------------------------------------------------------------------
 // Hook 1: 0x6F858F - ThreatPosed=0 BUILDING gate (AggressiveStance bypass)
+// Covers both human (hotkey/Always) and AI (TeamType via map entry).
 // Stolen bytes: 85 FF 74 18 8A 47 14 (7 bytes)
 // ---------------------------------------------------------------------------
 
@@ -94,9 +126,11 @@ DEFINE_HOOK(0x6F858F, TechnoClass_EvaluateObject_AggressiveStance_Buildings, 0x7
     GET(TechnoClass*, pThis, EDI);
     GET(TechnoClass*, pTarget, ESI);
 
-    if (pThis && pThis->Owner->IsControlledByHuman()
-        && pTarget && pTarget->WhatAmI() == AbstractType::Building)
+    if (pThis && pTarget && pTarget->WhatAmI() == AbstractType::Building)
     {
+        if (IsExemptTarget(pTarget))
+            return 0;
+
         if (IsAggressiveStance(pThis) && AnyWeaponCanTarget(pThis, pTarget))
             return 0x6F88BF;
     }
@@ -105,9 +139,7 @@ DEFINE_HOOK(0x6F858F, TechnoClass_EvaluateObject_AggressiveStance_Buildings, 0x7
 
 // ---------------------------------------------------------------------------
 // Hook 2: 0x6F8503 - ThreatPosed=0 gate for NON-BUILDING/NON-VEHICLE targets
-// Context: SUB EAX,ECX / TEST EAX,EAX / JE deny
 // Stolen bytes: 2B C1 85 C0 0F 84 (6 bytes)
-// If aggressive stance, jump to 0x6F851C to skip both deny checks.
 // ---------------------------------------------------------------------------
 
 DEFINE_HOOK(0x6F8503, TechnoClass_EvaluateObject_AggressiveStance_Units, 0x6)
@@ -117,9 +149,11 @@ DEFINE_HOOK(0x6F8503, TechnoClass_EvaluateObject_AggressiveStance_Units, 0x6)
     GET(TechnoClass*, pThis, EDI);
     GET(TechnoClass*, pTarget, ESI);
 
-    if (pThis && pThis->Owner->IsControlledByHuman()
-        && pTarget && pTarget->WhatAmI() != AbstractType::Building)
+    if (pThis && pTarget && pTarget->WhatAmI() != AbstractType::Building)
     {
+        if (IsExemptTarget(pTarget))
+            return 0;
+
         if (IsAggressiveStance(pThis) && AnyWeaponCanTarget(pThis, pTarget))
             return SkipDeny;
     }
@@ -129,8 +163,8 @@ DEFINE_HOOK(0x6F8503, TechnoClass_EvaluateObject_AggressiveStance_Units, 0x6)
 
 // ---------------------------------------------------------------------------
 // Hook 3: 0x6F8604 - CanTarget allow point for ALL buildings (armed + unarmed)
-// Enforces CanTarget.MaxHealth/MinHealth for buildings since Phobos CanFire
-// does not enforce these tags for BuildingClass targets.
+// Enforces CanTarget.MaxHealth/MinHealth since Phobos CanFire doesn't cover
+// BuildingClass targets.
 // Stolen bytes: 8A 44 24 13 84 C0 (6 bytes)
 // ---------------------------------------------------------------------------
 
@@ -152,8 +186,6 @@ DEFINE_HOOK(0x6F8604, TechnoClass_EvaluateObject_BuildingHealthFilter, 0x6)
 
 // ---------------------------------------------------------------------------
 // Hook 4: 0x6F84A9 - ThreatPosed gate for VEHICLE targets (UnitClass=0xF)
-// Context: TEST CL,CL / JNZ deny - CL is ThreatPosed-derived bool for units
-// If aggressive stance, skip to 0x6F84B1 (past the deny jump).
 // Stolen bytes: 84 C9 0F 85 9E 04 (6 bytes)
 // ---------------------------------------------------------------------------
 
@@ -164,9 +196,11 @@ DEFINE_HOOK(0x6F84A9, TechnoClass_EvaluateObject_AggressiveStance_Vehicles, 0x6)
     GET(TechnoClass*, pThis, EDI);
     GET(TechnoClass*, pTarget, ESI);
 
-    if (pThis && pThis->Owner->IsControlledByHuman()
-        && pTarget && pTarget->WhatAmI() == AbstractType::Unit)
+    if (pThis && pTarget && pTarget->WhatAmI() == AbstractType::Unit)
     {
+        if (IsExemptTarget(pTarget))
+            return 0;
+
         if (IsAggressiveStance(pThis) && AnyWeaponCanTarget(pThis, pTarget))
             return SkipDeny;
     }
@@ -175,12 +209,9 @@ DEFINE_HOOK(0x6F84A9, TechnoClass_EvaluateObject_AggressiveStance_Vehicles, 0x6)
 }
 
 // ---------------------------------------------------------------------------
-// Hook 5: 0x6F84B1 - Vehicle path health filter
-// Fires immediately after the vehicle ThreatPosed deny is skipped (or passed).
+// Hook 5: 0x6F84B1 - Health filter for VEHICLE targets
 // EDI=pThis, ESI=pTarget still valid here.
-// Enforces CanTarget.MaxHealth/MinHealth for vehicle targets since Phobos
-// CanFire hook does not enforce these for non-TechnoClass cast targets.
-// Stolen bytes: 8B 87 1C 02 00 00 (6 bytes) = MOV EAX,[EDI+0x21C]
+// Stolen bytes: 8B 87 1C 02 00 00 (6 bytes)
 // ---------------------------------------------------------------------------
 
 DEFINE_HOOK(0x6F84B1, TechnoClass_EvaluateObject_VehicleHealthFilter, 0x6)
@@ -200,11 +231,10 @@ DEFINE_HOOK(0x6F84B1, TechnoClass_EvaluateObject_VehicleHealthFilter, 0x6)
 }
 
 // ---------------------------------------------------------------------------
-// Hook 6: 0x6F851C - Health filter for INFANTRY, AIRCRAFT, and other non-
-// building/non-vehicle targets. This is the convergence point after the
-// generic ThreatPosed gate (0x6F8503/0x6F8516) for all remaining types.
+// Hook 6: 0x6F851C - Health filter for INFANTRY, AIRCRAFT, and other types
+// Convergence point after generic ThreatPosed gate for non-building/vehicle.
 // EDI=pThis, ESI=pTarget still valid here.
-// Stolen bytes: A1 30 B2 A8 00 6A (6 bytes) = MOV EAX,[0xA8B230] / PUSH
+// Stolen bytes: A1 30 B2 A8 00 6A (6 bytes)
 // ---------------------------------------------------------------------------
 
 DEFINE_HOOK(0x6F851C, TechnoClass_EvaluateObject_OtherHealthFilter, 0x6)

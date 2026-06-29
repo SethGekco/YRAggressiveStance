@@ -20,6 +20,7 @@
   <ItemGroup>
     <ClCompile Include="src\Commands\AggressiveStance.cpp" />
     <ClCompile Include="src\Commands\Commands.cpp" />
+    <ClCompile Include="src\Ext\TeamType\Body.cpp" />
     <ClCompile Include="src\Ext\TechnoType\Body.cpp" />
     <ClCompile Include="src\Ext\Event\Body.cpp" />
     <ClCompile Include="src\Ext\Techno\Hooks.TargetEvaluation.cpp" />
@@ -32,6 +33,7 @@
   <ItemGroup>
     <ClInclude Include="src\Commands\AggressiveStance.h" />
     <ClInclude Include="src\Commands\Commands.h" />
+    <ClInclude Include="src\Ext\TeamType\Body.h" />
     <ClInclude Include="src\Ext\TechnoType\Body.h" />
     <ClInclude Include="src\Ext\Event\Body.h" />
     <ClInclude Include="src\Utilities\Swizzle.h" />
