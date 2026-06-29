@@ -28,7 +28,7 @@ static const WeaponHealthFilter& GetWeaponHealthFilter(WeaponTypeClass* pWeapon)
         return it->second;
 
     WeaponHealthFilter filter;
-    if (auto* pINI = CCINIClass::INI_Rules)
+    if (CCINIClass* pINI = CCINIClass::INI_Rules)
     {
         if (pWeapon && pWeapon->ID)
         {
@@ -53,7 +53,7 @@ static bool PassesHealthFilter(WeaponTypeClass* pWeapon, TechnoClass* pTarget)
 static bool PassesHouseFilter(WeaponTypeClass* pWeapon, TechnoClass* pThis, TechnoClass* pTarget)
 {
     if (!pWeapon || !pWeapon->ID || !pThis->Owner || !pTarget->Owner) return true;
-    auto* pINI = CCINIClass::INI_Rules;
+    CCINIClass* pINI = CCINIClass::INI_Rules;
     if (!pINI) return true;
     char buf[32] = {};
     pINI->ReadString(pWeapon->ID, "CanTargetHouses", "all", buf, sizeof(buf));
