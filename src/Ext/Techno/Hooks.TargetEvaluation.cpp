@@ -39,8 +39,6 @@ static const WeaponHealthFilter& GetWeaponHealthFilter(WeaponTypeClass* pWeapon)
             pINI->GetDouble(pWeapon->ID, "CanTarget.MaxHealth", filter.MaxHealth);
             pINI->GetDouble(pWeapon->ID, "CanTarget.MinHealth", filter.MinHealth);
             filter.HasFilter = (filter.MaxHealth < 1.0 || filter.MinHealth > 0.0);
-		        Debug::Log("[AggressiveStance] Weapon %s: MaxHealth=%.10f HasFilter=%d LessThan1=%d\n",
-            pWeapon->ID, filter.MaxHealth, (int)filter.HasFilter,
             (int)(filter.MaxHealth < 1.0));
         }
     }
