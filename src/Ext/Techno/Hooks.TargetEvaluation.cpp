@@ -81,26 +81,48 @@ static bool IsExemptTarget(TechnoClass* pTarget)
     if (!pTarget) return false;
     return TechnoTypeExt::IsExemptFromAggressiveStance(pTarget->GetTechnoType());
 }
+namespace AggressiveStanceTemp
+{
+    WeaponTypeClass* CurrentWeapon = nullptr;
+}
+
+DEFINE_HOOK(0x6F7E24, TechnoClass_EvaluateObject_CaptureWeapon, 0x6)
+{
+    GET(WeaponTypeClass*, pWeapon, EBP);
+    AggressiveStanceTemp::CurrentWeapon = pWeapon;
+    return 0;
+}
 
 // Returns true unless EVERY weapon on pThis explicitly forbids this target
 // via CanTarget.MaxHealth/MinHealth. A weapon with no health tag always
 // passes. This is only used to gate the AGGRESSIVE STANCE bypass and the
 // supplementary health-enforcement hooks - never normal vanilla targeting.
-static bool AnyWeaponPassesHealthFilter(TechnoClass* pThis, TechnoClass* pTarget)
+// Returns true if the weapon EvaluateObject is currently scoring against
+// (captured via AggressiveStanceTemp::CurrentWeapon) passes its own
+// CanTarget.MaxHealth/MinHealth filter for this target. Falls back to
+// checking both weapon slots if the capture is unavailable for any reason.
+static bool WeaponPassesHealthFilter(TechnoClass* pThis, TechnoClass* pTarget)
 {
-    bool sawAnyWeapon = false;
+    if (AggressiveStanceTemp::CurrentWeapon)
+        return PassesHealthFilter(AggressiveStanceTemp::CurrentWeapon, pTarget);
+
+    // Fallback: no captured weapon, check both slots (old behavior)
     for (int i = 0; i < 2; i++)
     {
         auto pWeaponStruct = pThis->GetWeapon(i);
         if (!pWeaponStruct || !pWeaponStruct->WeaponType) continue;
-        sawAnyWeapon = true;
         if (PassesHealthFilter(pWeaponStruct->WeaponType, pTarget))
             return true;
     }
-    // If the unit has no weapons at all, don't deny - let vanilla decide.
-    if (!sawAnyWeapon) return true;
-    return false;
+    return true; // no weapons fo
 }
+// ---------------------------------------------------------------------------
+// Capture the weapon EvaluateObject is actually being called with.
+// Mirrors Phobos's own EvaluateObjectTemp::PickedWeapon (Hooks.TargetEvaluation.cpp,
+// hook at 0x6F7E24) but kept in our own DLL since we can't link to theirs.
+// EBP holds the WeaponTypeClass* at function entry and is not clobbered before
+// our later hooks fire within the same EvaluateObject call.
+// -----------------------------------------------------------E
 
 // ---------------------------------------------------------------------------
 // Hook 1: 0x6F858F - ThreatPosed=0 BUILDING gate (AggressiveStance bypass)
@@ -120,7 +142,7 @@ DEFINE_HOOK(0x6F858F, TechnoClass_EvaluateObject_AggressiveStance_Buildings, 0x7
         if (IsExemptTarget(pTarget))
             return 0;
 
-        if (IsAggressiveStance(pThis) && AnyWeaponPassesHealthFilter(pThis, pTarget))
+        if (IsAggressiveStance(pThis) && WeaponPassesHealthFilter(pThis, pTarget))
             return 0x6F88BF;
     }
     return 0;
@@ -144,25 +166,13 @@ DEFINE_HOOK(0x6F8503, TechnoClass_EvaluateObject_AggressiveStance_Units, 0x6)
         if (IsExemptTarget(pTarget))
             return 0;
 
-        if (IsAggressiveStance(pThis) && AnyWeaponPassesHealthFilter(pThis, pTarget))
+        if (IsAggressiveStance(pThis) && WeaponPassesHealthFilter(pThis, pTarget))
             return SkipDeny;
     }
 
     return 0;
 }
 
-// ---------------------------------------------------------------------------
-// Hook 3: 0x6F8604 - CanTarget allow point for ALL buildings.
-// ONLY denies if a weapon explicitly sets CanTarget.MaxHealth/MinHealth AND
-// the target fails it. Units with no such tag are never affected.
-// Stolen bytes: 8A 44 24 13 84 C0 (6 bytes)
-// ---------------------------------------------------------------------------
-
-DEFINE_HOOK(0x6F8604, TechnoClass_EvaluateObject_BuildingHealthFilter, 0x6)
-{
- 
-    return 0;
-}
 
 // ---------------------------------------------------------------------------
 // Hook 4: 0x6F84A9 - ThreatPosed gate for VEHICLE targets (UnitClass=0xF)
@@ -181,43 +191,12 @@ DEFINE_HOOK(0x6F84A9, TechnoClass_EvaluateObject_AggressiveStance_Vehicles, 0x8)
         if (IsExemptTarget(pTarget))
             return 0;
 
-        if (IsAggressiveStance(pThis) && AnyWeaponPassesHealthFilter(pThis, pTarget))
+        if (IsAggressiveStance(pThis) && WeaponPassesHealthFilter(pThis, pTarget))
             return SkipDeny;
     }
 
     return 0;
 }
 
-// ---------------------------------------------------------------------------
-// Hook 5: 0x6F84B1 - Health filter for VEHICLE targets only.
-// Stolen bytes: 8B 87 1C 02 00 00 (6 bytes)
-// ---------------------------------------------------------------------------
 
-DEFINE_HOOK(0x6F84B1, TechnoClass_EvaluateObject_VehicleHealthFilter, 0x6)
-{
-   
-    return 0;
-}
 
-// ---------------------------------------------------------------------------
-// Hook 6: 0x6F851C - Health filter for INFANTRY, AIRCRAFT, and other types.
-// Stolen bytes: A1 30 B2 A8 00 6A (6 bytes)
-// ---------------------------------------------------------------------------
-
-DEFINE_HOOK(0x6F851C, TechnoClass_EvaluateObject_OtherHealthFilter, 0x6)
-{
-    enum { Deny = 0x6F894F };
-
-    GET(TechnoClass*, pThis, EDI);
-    GET(TechnoClass*, pTarget, ESI);
-
-    if (pThis && pTarget
-        && pTarget->WhatAmI() != AbstractType::Building
-        && pTarget->WhatAmI() != AbstractType::Unit)
-    {
-        if (!AnyWeaponPassesHealthFilter(pThis, pTarget))
-            return Deny;
-    }
-
-    return 0;
-}
