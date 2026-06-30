@@ -75,22 +75,11 @@ static bool IsAggressiveStance(TechnoClass* pThis)
     return false;
 }
 
-// Returns true if pTarget has AggressiveStance.Exempt=yes.
+// Returns true if pTarget has AggressiveStance.Exempt=yes
 static bool IsExemptTarget(TechnoClass* pTarget)
 {
     if (!pTarget) return false;
-    return TechnoTypeExt::IsExemptFromAggressiveStance(pTarget->GetTechnoType());
-}
-namespace AggressiveStanceTemp
-{
-    WeaponTypeClass* CurrentWeapon = nullptr;
-}
-
-DEFINE_HOOK(0x6F7E24, TechnoClass_EvaluateObject_CaptureWeapon, 0x6)
-{
-    GET(WeaponTypeClass*, pWeapon, EBP);
-    AggressiveStanceTemp::CurrentWeapon = pWeapon;
-    return 0;
+    return TechnoTypeExt::IsExemptFromAggressiveStance(pTarget->GetTechnoType())
 }
 
 // Returns true unless EVERY weapon on pThis explicitly forbids this target
@@ -103,18 +92,17 @@ DEFINE_HOOK(0x6F7E24, TechnoClass_EvaluateObject_CaptureWeapon, 0x6)
 // checking both weapon slots if the capture is unavailable for any reason.
 static bool WeaponPassesHealthFilter(TechnoClass* pThis, TechnoClass* pTarget)
 {
-    if (AggressiveStanceTemp::CurrentWeapon)
-        return PassesHealthFilter(AggressiveStanceTemp::CurrentWeapon, pTarget);
-
-    // Fallback: no captured weapon, check both slots (old behavior)
+        bool sawAnyWeapon = false;
     for (int i = 0; i < 2; i++)
     {
         auto pWeaponStruct = pThis->GetWeapon(i);
         if (!pWeaponStruct || !pWeaponStruct->WeaponType) continue;
+        sawAnyWeapon = true;
         if (PassesHealthFilter(pWeaponStruct->WeaponType, pTarget))
             return true;
     }
-    return true; // no weapons fo
+    if (!sawAnyWeapon) return true;
+    return false;
 }
 // ---------------------------------------------------------------------------
 // Capture the weapon EvaluateObject is actually being called with.
