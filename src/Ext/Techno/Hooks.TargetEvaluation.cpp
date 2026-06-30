@@ -79,7 +79,7 @@ static bool IsAggressiveStance(TechnoClass* pThis)
 static bool IsExemptTarget(TechnoClass* pTarget)
 {
     if (!pTarget) return false;
-    return TechnoTypeExt::IsExemptFromAggressiveStance(pTarget->GetTechnoType())
+    return TechnoTypeExt::IsExemptFromAggressiveStance(pTarget->GetTechnoType());
 }
 
 // Returns true unless EVERY weapon on pThis explicitly forbids this target
