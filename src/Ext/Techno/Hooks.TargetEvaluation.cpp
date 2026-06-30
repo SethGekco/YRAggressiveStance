@@ -230,25 +230,5 @@ DEFINE_HOOK(0x668F6A, RulesData_InitializeAfterAllLoaded_PreWarmWeaponCache, 0x5
 
 DEFINE_HOOK(0x6FC339, TechnoClass_CanFire_BuildingHealthFilter, 0x6)
 {
-    enum { CannotFire = 0x6FCB7E };
-
-    GET(WeaponTypeClass*, pWeapon, EDI);
-    GET_STACK(AbstractClass*, pTarget, STACK_OFFSET(0x20, 0x4));
-
-    if (pWeapon && pTarget)
-    {
-        auto pTargetAsTechno = abstract_cast<TechnoClass*>(pTarget);
-        if (pTargetAsTechno)
-        {
-            auto it = WeaponHealthFilterCache.find(pWeapon);
-            if (it != WeaponHealthFilterCache.end() && it->second.HasFilter)
-            {
-                double hp = pTargetAsTechno->GetHealthPercentage();
-                if (!(hp < it->second.MaxHealth && hp >= it->second.MinHealth))
-                    return CannotFire;
-            }
-        }
-    }
-
     return 0;
 }
