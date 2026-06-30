@@ -205,17 +205,7 @@ DEFINE_HOOK(0x6F84A9, TechnoClass_EvaluateObject_AggressiveStance_Vehicles, 0x8)
 
 DEFINE_HOOK(0x6F84B1, TechnoClass_EvaluateObject_VehicleHealthFilter, 0x6)
 {
-    enum { Deny = 0x6F894F };
-
-    GET(TechnoClass*, pThis, EDI);
-    GET(TechnoClass*, pTarget, ESI);
-
-    if (pThis && pTarget && pTarget->WhatAmI() == AbstractType::Unit)
-    {
-        if (!AnyWeaponPassesHealthFilter(pThis, pTarget))
-            return Deny;
-    }
-
+   
     return 0;
 }
 
