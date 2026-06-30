@@ -232,11 +232,10 @@ DEFINE_HOOK(0x6FC339, TechnoClass_CanFire_BuildingHealthFilter, 0x6)
 {
     enum { CannotFire = 0x6FCB7E };
 
-    GET(TechnoClass*,     pTargetTechno, EBP);
-    GET(WeaponTypeClass*, pWeapon,       EDI);
+    GET(WeaponTypeClass*, pWeapon, EDI);
     GET_STACK(AbstractClass*, pTarget, STACK_OFFSET(0x20, 0x4));
 
-        if (!pTargetTechno && pTarget)
+    if (pWeapon && pTarget)
     {
         auto pTargetAsTechno = abstract_cast<TechnoClass*>(pTarget);
         if (pTargetAsTechno)
@@ -250,5 +249,6 @@ DEFINE_HOOK(0x6FC339, TechnoClass_CanFire_BuildingHealthFilter, 0x6)
             }
         }
     }
+
     return 0;
 }
