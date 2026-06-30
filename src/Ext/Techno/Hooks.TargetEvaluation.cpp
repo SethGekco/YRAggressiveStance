@@ -210,12 +210,9 @@ DEFINE_HOOK(0x6FC339, TechnoClass_CanFire_BuildingHealthFilter, 0x6)
 
     // Only intervene when Phobos's own check was skipped (pTargetTechno null)
     // and the target is actually a building.
-    if (!pTargetTechno && pTarget && pTarget->WhatAmI() == AbstractType::Building)
+        if (!pTargetTechno && pTarget && pTarget->WhatAmI() == AbstractType::Building)
     {
-        // Cast the building as TechnoClass - BuildingClass inherits TechnoClass
-        // so this is safe for health percentage calculation.
-        auto pBuildingTechno = static_cast<TechnoClass*>(
-            static_cast<void*>(pTarget));
+        auto pBuildingTechno = abstract_cast<TechnoClass*>(pTarget);
 
         if (pBuildingTechno)
         {
