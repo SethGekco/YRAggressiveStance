@@ -189,3 +189,64 @@ DEFINE_HOOK(0x6F84A9, TechnoClass_EvaluateObject_AggressiveStance_Vehicles, 0x8)
 
 
 
+// ---------------------------------------------------------------------------
+// Hook 7: 0x668F6A - RulesData_InitializeAfterAllLoaded
+// Pre-warms the WeaponHealthFilterCache for every weapon type after all INI
+// files are fully loaded. This ensures the cache is populated with correct
+// values before any CanFire call can read from it, preventing the cache
+// poisoning that occurred when GetWeaponHealthFilter was called lazily
+// from inside CanFire (where INI_Rules may not yet have scenario data).
+// Stolen bytes: A1 38 B2 A8 00 (5 bytes) = MOV EAX,[0xA8B238]
+// ---------------------------------------------------------------------------
+
+DEFINE_HOOK(0x668F6A, RulesData_InitializeAfterAllLoaded_PreWarmWeaponCache, 0x5)
+{
+    WeaponHealthFilterCache.clear();
+
+    for (int i = 0; i < WeaponTypeClass::Array->Count; i++)
+    {
+        WeaponTypeClass* pWeapon = WeaponTypeClass::Array->Items[i];
+        if (pWeapon)
+            GetWeaponHealthFilter(pWeapon); // populates cache entry
+    }
+
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// Hook 8: 0x6FC339 - TechnoClass::CanFire
+// Enforces CanTarget.MaxHealth/MinHealth for building targets, where Phobos's
+// own check is skipped because pTargetTechno (EBP) is null for buildings.
+// Reads ONLY from the pre-warmed cache - never calls CCINIClass at runtime.
+// Registers: ESI=pThis, EDI=pWeapon, EBP=pTargetTechno (null for buildings),
+//            stack arg pTarget at STACK_OFFSET(0x20, 0x4).
+// Stolen bytes: 8A 87 4F 01 00 00 (6 bytes) = MOV AL,[EDI+0x14F]
+// ---------------------------------------------------------------------------
+
+DEFINE_HOOK(0x6FC339, TechnoClass_CanFire_BuildingHealthFilter, 0x6)
+{
+    enum { CannotFire = 0x6FCB7E };
+
+    GET(TechnoClass*,     pTargetTechno, EBP);
+    GET(WeaponTypeClass*, pWeapon,       EDI);
+    GET_STACK(AbstractClass*, pTarget, STACK_OFFSET(0x20, 0x4));
+
+    // Only handle the case Phobos misses: building target with null pTargetTechno
+    if (!pTargetTechno && pTarget && pTarget->WhatAmI() == AbstractType::Building)
+    {
+        // Look up cache only - never read INI here
+        auto it = WeaponHealthFilterCache.find(pWeapon);
+        if (it != WeaponHealthFilterCache.end() && it->second.HasFilter)
+        {
+            auto pBuilding = abstract_cast<TechnoClass*>(pTarget);
+            if (pBuilding)
+            {
+                double hp = pBuilding->GetHealthPercentage();
+                if (!(hp < it->second.MaxHealth && hp >= it->second.MinHealth))
+                    return CannotFire;
+            }
+        }
+    }
+
+    return 0;
+}
