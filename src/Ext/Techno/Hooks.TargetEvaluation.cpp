@@ -188,43 +188,4 @@ DEFINE_HOOK(0x6F84A9, TechnoClass_EvaluateObject_AggressiveStance_Vehicles, 0x8)
 
 
 
-// ---------------------------------------------------------------------------
-// Hook 7: 0x6FC339 - TechnoClass::CanFire
-// Phobos already hooks this address to enforce CanTarget.MaxHealth, but its
-// check is gated on pTargetTechno (from EBP) being non-null. For building
-// targets, EBP is null at this point in vanilla, so Phobos's check is
-// silently skipped. We add our own enforcement specifically for buildings.
-// Registers: ESI=pThis, EDI=pWeapon, EBP=pTargetTechno (null for buildings),
-//            stack STACK_OFFSET(0x20,0x4)=pTarget (AbstractClass*).
-// Stolen bytes: 8A 87 4F 01 00 00 (6 bytes) = MOV AL,[EDI+0x14F]
-// ---------------------------------------------------------------------------
 
-DEFINE_HOOK(0x6FC339, TechnoClass_CanFire_BuildingHealthFilter, 0x6)
-{
-    enum { CannotFire = 0x6FCB7E };
-
-    GET(TechnoClass*,    pThis,   ESI);
-    GET(WeaponTypeClass*, pWeapon, EDI);
-    GET(TechnoClass*,    pTargetTechno, EBP);
-    GET_STACK(AbstractClass*, pTarget, STACK_OFFSET(0x20, 0x4));
-
-    // Only intervene when Phobos's own check was skipped (pTargetTechno null)
-    // and the target is actually a building.
-        if (!pTargetTechno && pTarget && pTarget->WhatAmI() == AbstractType::Building)
-    {
-        auto pBuildingTechno = abstract_cast<TechnoClass*>(pTarget);
-
-        if (pBuildingTechno)
-        {
-            const auto& filter = GetWeaponHealthFilter(pWeapon);
-            if (filter.HasFilter)
-            {
-                double hp = pBuildingTechno->GetHealthPercentage();
-                if (!(hp < filter.MaxHealth && hp >= filter.MinHealth))
-                    return CannotFire;
-            }
-        }
-    }
-
-    return 0;
-}
