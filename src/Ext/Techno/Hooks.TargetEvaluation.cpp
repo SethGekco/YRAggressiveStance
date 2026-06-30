@@ -236,22 +236,19 @@ DEFINE_HOOK(0x6FC339, TechnoClass_CanFire_BuildingHealthFilter, 0x6)
     GET(WeaponTypeClass*, pWeapon,       EDI);
     GET_STACK(AbstractClass*, pTarget, STACK_OFFSET(0x20, 0x4));
 
-    // Only handle the case Phobos misses: building target with null pTargetTechno
-    if (!pTargetTechno && pTarget && pTarget->WhatAmI() == AbstractType::Building)
+        if (!pTargetTechno && pTarget)
     {
-        // Look up cache only - never read INI here
-        auto it = WeaponHealthFilterCache.find(pWeapon);
-        if (it != WeaponHealthFilterCache.end() && it->second.HasFilter)
+        auto pTargetAsTechno = abstract_cast<TechnoClass*>(pTarget);
+        if (pTargetAsTechno)
         {
-            auto pBuilding = abstract_cast<TechnoClass*>(pTarget);
-            if (pBuilding)
+            auto it = WeaponHealthFilterCache.find(pWeapon);
+            if (it != WeaponHealthFilterCache.end() && it->second.HasFilter)
             {
-                double hp = pBuilding->GetHealthPercentage();
+                double hp = pTargetAsTechno->GetHealthPercentage();
                 if (!(hp < it->second.MaxHealth && hp >= it->second.MinHealth))
                     return CannotFire;
             }
         }
     }
-
     return 0;
 }
