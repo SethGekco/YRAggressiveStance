@@ -179,7 +179,7 @@ DEFINE_HOOK(0x6F8604, TechnoClass_EvaluateObject_BuildingHealthFilter, 0x6)
 // Stolen bytes: 84 C9 0F 85 9E 04 (6 bytes)
 // ---------------------------------------------------------------------------
 
-DEFINE_HOOK(0x6F84A9, TechnoClass_EvaluateObject_AggressiveStance_Vehicles, 0x6)
+DEFINE_HOOK(0x6F84A9, TechnoClass_EvaluateObject_AggressiveStance_Vehicles, 0x8)
 {
     enum { SkipDeny = 0x6F84B1 };
 
