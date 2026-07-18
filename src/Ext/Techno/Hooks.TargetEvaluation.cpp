@@ -34,12 +34,11 @@ static const WeaponHealthFilter& GetWeaponHealthFilter(WeaponTypeClass* pWeapon)
     {
         if (pWeapon && pWeapon->ID)
         {
-                        filter.MaxHealth = 1.0;
+            filter.MaxHealth = 1.0;
             filter.MinHealth = 0.0;
             pINI->GetDouble(pWeapon->ID, "CanTarget.MaxHealth", filter.MaxHealth);
             pINI->GetDouble(pWeapon->ID, "CanTarget.MinHealth", filter.MinHealth);
             filter.HasFilter = (filter.MaxHealth < 1.0 || filter.MinHealth > 0.0);
-            (int)(filter.MaxHealth < 1.0));
         }
     }
 
