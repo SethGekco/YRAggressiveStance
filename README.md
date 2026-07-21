@@ -1,8 +1,12 @@
 This is a editted forked copy of the original. It has two new features:
+
+
 [SomeTechnoType]
+
 AggressiveStance.Always=yes  ;place on a techno type (infantry, vehicles, buildings, etc.) to make it always aggressive stanced
 
 [SomeTeamType]
+
 AggressiveStance=yes      ;place on Team Type and makes all members aggressive.
 
 
