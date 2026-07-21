@@ -9,7 +9,13 @@ AggressiveStance.Always=yes  ;place on a techno type (infantry, vehicles, buildi
 
 AggressiveStance=yes      ;place on Team Type and makes all members aggressive.
 
+[SomeWarhead]
 
+AggressiveStance=yes
+
+AggressiveStance.Duration = -1
+
+AggressiveStance.AffectsHouse= owner, allies, enemies, neutral, all, none
 
 # YRAggressiveStance
 An engine extension that enables Aggressive Stance for Yuri's Revenge.
