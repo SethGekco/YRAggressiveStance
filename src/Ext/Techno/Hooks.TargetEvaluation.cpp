@@ -63,12 +63,16 @@ static bool IsAggressiveStance(TechnoClass* pThis)
 
     if (AggressiveStanceClass::AggressiveStanceMap[pThis])
         return true;
+    if (AggressiveStanceClass::IsGrantActive(pThis))
+        return true;
     if (TechnoTypeExt::IsAlwaysAggressiveStance(pThis->GetTechnoType()))
         return true;
 
     if (pThis->Transporter)
     {
         if (AggressiveStanceClass::AggressiveStanceMap[pThis->Transporter])
+            return true;
+        if (AggressiveStanceClass::IsGrantActive(pThis->Transporter))
             return true;
         if (TechnoTypeExt::IsAlwaysAggressiveStance(pThis->Transporter->GetTechnoType()))
             return true;

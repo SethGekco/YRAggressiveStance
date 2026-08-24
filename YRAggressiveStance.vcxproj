@@ -22,6 +22,7 @@
     <ClCompile Include="src\Commands\Commands.cpp" />
     <ClCompile Include="src\Ext\TeamType\Body.cpp" />
     <ClCompile Include="src\Ext\TechnoType\Body.cpp" />
+    <ClCompile Include="src\Ext\WarheadType\Body.cpp" />
     <ClCompile Include="src\Ext\Event\Body.cpp" />
     <ClCompile Include="src\Ext\Techno\Hooks.TargetEvaluation.cpp" />
     <ClCompile Include="src\Utilities\Debug.cpp" />
@@ -35,6 +36,7 @@
     <ClInclude Include="src\Commands\Commands.h" />
     <ClInclude Include="src\Ext\TeamType\Body.h" />
     <ClInclude Include="src\Ext\TechnoType\Body.h" />
+    <ClInclude Include="src\Ext\WarheadType\Body.h" />
     <ClInclude Include="src\Ext\Event\Body.h" />
     <ClInclude Include="src\Utilities\Swizzle.h" />
     <ClInclude Include="src\Utilities\Debug.h" />

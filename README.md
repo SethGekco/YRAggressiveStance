@@ -1,21 +1,18 @@
-This is a editted forked copy of the original. It has two new features:
+This is an edited forked copy of the original. It adds several new ways to put units into Aggressive Stance:
 
-
+```ini
 [SomeTechnoType]
-
-AggressiveStance.Always=yes  ;place on a techno type (infantry, vehicles, buildings, etc.) to make it always aggressive stanced
+AggressiveStance.Always=yes         ; make this techno type (infantry, vehicle, building, etc.) always aggressive-stanced
 
 [SomeTeamType]
+AggressiveStance=yes                ; every member of a team of this type is aggressive while it belongs to the team
 
-AggressiveStance=yes      ;place on Team Type and makes all members aggressive.
-
-[SomeWarhead]
-
-AggressiveStance=yes
-
-AggressiveStance.Duration = -1
-
-AggressiveStance.AffectsHouse= owner, allies, enemies, neutral, all, none
+[SomeWarhead]                       ; "friendly Chaos Gas" - units the warhead hits become aggressive for a while
+AggressiveStance=yes                ; enable the effect (equivalent to AggressiveStance.Duration=-1 on its own)
+AggressiveStance.Duration=-1        ; game frames; -1 = indefinite, 0 = clear an existing grant, >0 = timed
+AggressiveStance.Cumulative=no      ; yes = add Duration to the time remaining, no = overwrite it
+AggressiveStance.AffectsHouses=all  ; comma list relative to the firer: owner, allies, enemies, neutral, all, none (default all)
+```
 
 # YRAggressiveStance
 An engine extension that enables Aggressive Stance for Yuri's Revenge.
