@@ -3,6 +3,11 @@ This is an edited forked copy of the original. It adds several new ways to put u
 ```ini
 [SomeTechnoType]
 AggressiveStance.Always=yes         ; make this techno type (infantry, vehicle, building, etc.) always aggressive-stanced
+AggressiveStance.Veteran=yes        ; become aggressive once this unit reaches Veteran rank (or higher)
+AggressiveStance.Elite=yes          ; become aggressive once this unit reaches Elite rank
+
+[SomeCountry]
+AggressiveStance=yes                ; every unit owned by a house of this country is always aggressive
 
 [SomeTeamType]
 AggressiveStance=yes                ; every member of a team of this type is aggressive while it belongs to the team

@@ -27,9 +27,18 @@ public:
     // -1 = not set (use auto-detect), 0 = forced off, 1 = forced on.
     static std::map<TechnoTypeClass*, int> AggressiveStanceTogglableMap;
 
+    // AggressiveStance.Veteran=yes / AggressiveStance.Elite=yes  (on attacker type)
+    // Units of this type become aggressive once they reach the given rank:
+    // Veteran = veteran or elite, Elite = elite only.
+    static std::map<TechnoTypeClass*, bool> AggressiveStanceVeteranMap;
+    static std::map<TechnoTypeClass*, bool> AggressiveStanceEliteMap;
+
     static bool IsAlwaysAggressiveStance(TechnoTypeClass* pType);
     static bool IsExemptFromAggressiveStance(TechnoTypeClass* pType);
 
     // Returns: -1 = not set (auto), 0 = not togglable, 1 = togglable
     static int  GetTogglable(TechnoTypeClass* pType);
+
+    static bool IsAggressiveWhenVeteran(TechnoTypeClass* pType);
+    static bool IsAggressiveWhenElite(TechnoTypeClass* pType);
 };

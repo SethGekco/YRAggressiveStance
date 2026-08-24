@@ -5,6 +5,7 @@
 #include <CCINIClass.h>
 #include <Commands/AggressiveStance.h>
 #include <Ext/TechnoType/Body.h>
+#include <Ext/HouseType/Body.h>
 #include <Helpers/Macro.h>
 #include <map>
 
@@ -56,28 +57,42 @@ static bool PassesHealthFilter(WeaponTypeClass* pWeapon, TechnoClass* pTarget)
     return (hp < filter.MaxHealth) && (hp >= filter.MinHealth);
 }
 
-// Returns true if pThis is in aggressive stance for any reason.
+// True if this specific techno is aggressive for any reason that travels with
+// it: the hotkey/team map, a warhead grant, an Always type, a veteran/elite
+// rank tag, or an aggressive country.
+static bool IsSelfAggressive(TechnoClass* p)
+{
+    if (!p) return false;
+
+    if (AggressiveStanceClass::AggressiveStanceMap[p])
+        return true;
+    if (AggressiveStanceClass::IsGrantActive(p))
+        return true;
+
+    auto pType = p->GetTechnoType();
+    if (TechnoTypeExt::IsAlwaysAggressiveStance(pType))
+        return true;
+    if (TechnoTypeExt::IsAggressiveWhenVeteran(pType)
+        && (p->Veterancy.IsVeteran() || p->Veterancy.IsElite()))
+        return true;
+    if (TechnoTypeExt::IsAggressiveWhenElite(pType) && p->Veterancy.IsElite())
+        return true;
+
+    if (p->Owner && HouseTypeExt::IsAggressiveStance(p->Owner->Type))
+        return true;
+
+    return false;
+}
+
+// Returns true if pThis is in aggressive stance for any reason (its own state,
+// or that of the transport carrying it).
 static bool IsAggressiveStance(TechnoClass* pThis)
 {
     if (!pThis) return false;
-
-    if (AggressiveStanceClass::AggressiveStanceMap[pThis])
+    if (IsSelfAggressive(pThis))
         return true;
-    if (AggressiveStanceClass::IsGrantActive(pThis))
+    if (pThis->Transporter && IsSelfAggressive(pThis->Transporter))
         return true;
-    if (TechnoTypeExt::IsAlwaysAggressiveStance(pThis->GetTechnoType()))
-        return true;
-
-    if (pThis->Transporter)
-    {
-        if (AggressiveStanceClass::AggressiveStanceMap[pThis->Transporter])
-            return true;
-        if (AggressiveStanceClass::IsGrantActive(pThis->Transporter))
-            return true;
-        if (TechnoTypeExt::IsAlwaysAggressiveStance(pThis->Transporter->GetTechnoType()))
-            return true;
-    }
-
     return false;
 }
 
