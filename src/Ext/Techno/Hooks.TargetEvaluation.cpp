@@ -117,75 +117,92 @@ static bool WeaponPassesHealthFilter(TechnoClass* pThis, TechnoClass* pTarget)
 // ---------------------------------------------------------------------------
 // Hook 1: 0x6F858F - ThreatPosed=0 BUILDING gate (AggressiveStance bypass)
 // Only fires for buildings that vanilla would otherwise REJECT (ThreatPosed=0).
-// Normal armed-building targeting never reaches this hook's deny path because
-// it returns 0 (fall through to vanilla) unless aggressive stance applies.
-// Stolen bytes: 85 FF 74 18 8A 47 14 (7 bytes)
+//
+// Stolen bytes: 85 FF 74 18 8A 47 14 (7 bytes) =
+//   test edi,edi / je 0x6F85AB / mov al,[edi+0x14]
+// This INCLUDES a relative branch (je rel8). We must therefore NEVER `return 0`:
+// on return 0 Syringe re-executes the copied bytes from its own trampoline stub,
+// and the branch offset - which was never relocated - sends EIP into garbage in
+// the stub page (observed crash: C0000005 at ~0x09ED0475). Always return an
+// explicit address, replicating the stolen instructions by hand.
 // ---------------------------------------------------------------------------
 
 DEFINE_HOOK(0x6F858F, TechnoClass_EvaluateObject_AggressiveStance_Buildings, 0x7)
 {
+    enum { EdiZero = 0x6F85AB, Continue = 0x6F8596, Accept = 0x6F88BF };
+
     GET(TechnoClass*, pThis, EDI);
     GET(TechnoClass*, pTarget, ESI);
 
-    if (pThis && pTarget && pTarget->WhatAmI() == AbstractType::Building)
+    if (pThis && pTarget && pTarget->WhatAmI() == AbstractType::Building
+        && !IsExemptTarget(pTarget)
+        && IsAggressiveStance(pThis) && WeaponPassesHealthFilter(pThis, pTarget))
     {
-        if (IsExemptTarget(pTarget))
-            return 0;
-
-        if (IsAggressiveStance(pThis) && WeaponPassesHealthFilter(pThis, pTarget))
-            return 0x6F88BF;
+        return Accept;
     }
-    return 0;
+
+    // Replicate `test edi,edi / je 0x6F85AB / mov al,[edi+0x14]`.
+    if (!pThis)
+        return EdiZero;
+
+    R->AL(*reinterpret_cast<BYTE*>(reinterpret_cast<DWORD>(pThis) + 0x14));
+    return Continue;
 }
 
 // ---------------------------------------------------------------------------
 // Hook 2: 0x6F8503 - ThreatPosed=0 gate for NON-BUILDING targets
-// Same logic: only intervenes for the aggressive stance bypass.
-// Stolen bytes: 2B C1 85 C0 0F 84 (6 bytes)
+//
+// Stolen bytes: 0F 84 46 04 00 00 (6 bytes) = je 0x6F894F, a rel32 branch
+// (ZF comes from the preceding `test eax,eax` at 0x6F8501). This is the hook
+// that produced the three crash snapshots: `return 0` made Syringe re-run the
+// un-relocated `je` from its stub and jump into garbage. Never return 0 -
+// always return an explicit address.
 // ---------------------------------------------------------------------------
 
 DEFINE_HOOK(0x6F8503, TechnoClass_EvaluateObject_AggressiveStance_Units, 0x6)
 {
-    enum { SkipDeny = 0x6F851C };
+    enum { SkipDeny = 0x6F851C, Deny = 0x6F894F, Continue = 0x6F8509 };
 
     GET(TechnoClass*, pThis, EDI);
     GET(TechnoClass*, pTarget, ESI);
 
-    if (pThis && pTarget && pTarget->WhatAmI() != AbstractType::Building)
+    if (pThis && pTarget && pTarget->WhatAmI() != AbstractType::Building
+        && !IsExemptTarget(pTarget)
+        && IsAggressiveStance(pThis) && WeaponPassesHealthFilter(pThis, pTarget))
     {
-        if (IsExemptTarget(pTarget))
-            return 0;
-
-        if (IsAggressiveStance(pThis) && WeaponPassesHealthFilter(pThis, pTarget))
-            return SkipDeny;
+        return SkipDeny;
     }
 
-    return 0;
+    // Replicate `je 0x6F894F` (taken when the tested EAX was zero).
+    return (R->EAX() == 0) ? Deny : Continue;
 }
 
 
 // ---------------------------------------------------------------------------
 // Hook 4: 0x6F84A9 - ThreatPosed gate for VEHICLE targets (UnitClass=0xF)
-// Stolen bytes: 84 C9 0F 85 9E 04 (6 bytes)
+//
+// Stolen bytes: 84 C9 0F 85 9E 04 00 00 (8 bytes) = test cl,cl / jne 0x6F894F,
+// a rel32 branch. Same footgun as hooks 1 & 2: never return 0. The continue
+// point (0x6F84B1) is both the vanilla fall-through and the aggressive bypass
+// target, so only a true `cl != 0` reaches the deny path.
 // ---------------------------------------------------------------------------
 
 DEFINE_HOOK(0x6F84A9, TechnoClass_EvaluateObject_AggressiveStance_Vehicles, 0x8)
 {
-    enum { SkipDeny = 0x6F84B1 };
+    enum { Deny = 0x6F894F, Continue = 0x6F84B1 };
 
     GET(TechnoClass*, pThis, EDI);
     GET(TechnoClass*, pTarget, ESI);
 
-    if (pThis && pTarget && pTarget->WhatAmI() == AbstractType::Unit)
+    if (pThis && pTarget && pTarget->WhatAmI() == AbstractType::Unit
+        && !IsExemptTarget(pTarget)
+        && IsAggressiveStance(pThis) && WeaponPassesHealthFilter(pThis, pTarget))
     {
-        if (IsExemptTarget(pTarget))
-            return 0;
-
-        if (IsAggressiveStance(pThis) && WeaponPassesHealthFilter(pThis, pTarget))
-            return SkipDeny;
+        return Continue;
     }
 
-    return 0;
+    // Replicate `test cl,cl / jne 0x6F894F`.
+    return (R->CL() != 0) ? Deny : Continue;
 }
 
 
