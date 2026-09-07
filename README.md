@@ -19,6 +19,23 @@ AggressiveStance.Cumulative=no      ; yes = add Duration to the time remaining, 
 AggressiveStance.AffectsHouses=all  ; comma list relative to the firer: owner, allies, enemies, neutral, all, none (default all)
 ```
 
+## Using with Phobos AttachEffects
+
+There is no separate "AttachEffect" tag, and none is needed: pair the warhead grant with a
+Phobos `AttachEffect` on the **same warhead**. Phobos provides the effect's lifecycle and visuals
+(animation, tint, stacking, discard conditions); this DLL provides the aggressive behaviour for the
+same window. Give them matching durations:
+
+```ini
+[FriendlyChaosWH]
+AttachEffect.AttachTypes=ChaosBuff   ; Phobos effect: animation / tint / stacking / discard rules
+AggressiveStance.Duration=150        ; this DLL: the aggressive behaviour, same length as the effect
+AggressiveStance.AffectsHouses=owner,allies
+```
+
+Both fire from one hit, using only public INI — no Phobos modification and no version-fragile
+interop. This composition is the intended way to drive aggressive stance from an AttachEffect.
+
 # YRAggressiveStance
 An engine extension that enables Aggressive Stance for Yuri's Revenge.
 
