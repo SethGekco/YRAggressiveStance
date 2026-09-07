@@ -2,11 +2,66 @@
 #include <EventClass.h>
 #include <HouseClass.h>
 #include <InfantryTypeClass.h>
+#include <Fundamentals.h>
 #include <Ext/Event/Body.h>
 #include <Ext/TechnoType/Body.h>
 #include <Utilities/GeneralUtils.h>
 
 std::map<TechnoClass*, bool> AggressiveStanceClass::AggressiveStanceMap;
+std::map<TechnoClass*, int>  AggressiveStanceClass::GrantExpiry;
+
+bool AggressiveStanceClass::IsGrantActive(TechnoClass* pTechno)
+{
+    auto it = GrantExpiry.find(pTechno);
+    if (it == GrantExpiry.end())
+        return false;
+
+    if (it->second == -1)               // indefinite
+        return true;
+
+    if (Unsorted::CurrentFrame < it->second)
+        return true;
+
+    GrantExpiry.erase(it);              // expired — prune
+    return false;
+}
+
+void AggressiveStanceClass::ApplyGrant(TechnoClass* pTechno, int duration, bool cumulative)
+{
+    if (!pTechno)
+        return;
+
+    if (duration == 0)                  // clear / turn off
+    {
+        GrantExpiry.erase(pTechno);
+        return;
+    }
+
+    if (duration < 0)                   // forever
+    {
+        GrantExpiry[pTechno] = -1;
+        return;
+    }
+
+    const int now = Unsorted::CurrentFrame;
+
+    if (cumulative)
+    {
+        auto it = GrantExpiry.find(pTechno);
+        if (it != GrantExpiry.end())
+        {
+            if (it->second == -1)       // already indefinite — leave it
+                return;
+
+            // Extend from whichever is later: the current expiry or now.
+            const int base = it->second > now ? it->second : now;
+            GrantExpiry[pTechno] = base + duration;
+            return;
+        }
+    }
+
+    GrantExpiry[pTechno] = now + duration;   // set / overwrite
+}
 
 const char* AggressiveStanceClass::GetName() const
 {

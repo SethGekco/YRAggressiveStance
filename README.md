@@ -1,21 +1,40 @@
-This is a editted forked copy of the original. It has two new features:
+This is an edited forked copy of the original. It adds several new ways to put units into Aggressive Stance:
 
-
+```ini
 [SomeTechnoType]
+AggressiveStance.Always=yes         ; make this techno type (infantry, vehicle, building, etc.) always aggressive-stanced
+AggressiveStance.Veteran=yes        ; become aggressive once this unit reaches Veteran rank (or higher)
+AggressiveStance.Elite=yes          ; become aggressive once this unit reaches Elite rank
 
-AggressiveStance.Always=yes  ;place on a techno type (infantry, vehicles, buildings, etc.) to make it always aggressive stanced
+[SomeCountry]
+AggressiveStance=yes                ; every unit owned by a house of this country is always aggressive
 
 [SomeTeamType]
+AggressiveStance=yes                ; every member of a team of this type is aggressive while it belongs to the team
 
-AggressiveStance=yes      ;place on Team Type and makes all members aggressive.
+[SomeWarhead]                       ; "friendly Chaos Gas" - units the warhead hits become aggressive for a while
+AggressiveStance=yes                ; enable the effect (equivalent to AggressiveStance.Duration=-1 on its own)
+AggressiveStance.Duration=-1        ; game frames; -1 = indefinite, 0 = clear an existing grant, >0 = timed
+AggressiveStance.Cumulative=no      ; yes = add Duration to the time remaining, no = overwrite it
+AggressiveStance.AffectsHouses=all  ; comma list relative to the firer: owner, allies, enemies, neutral, all, none (default all)
+```
 
-[SomeWarhead]
+## Using with Phobos AttachEffects
 
-AggressiveStance=yes
+There is no separate "AttachEffect" tag, and none is needed: pair the warhead grant with a
+Phobos `AttachEffect` on the **same warhead**. Phobos provides the effect's lifecycle and visuals
+(animation, tint, stacking, discard conditions); this DLL provides the aggressive behaviour for the
+same window. Give them matching durations:
 
-AggressiveStance.Duration = -1
+```ini
+[FriendlyChaosWH]
+AttachEffect.AttachTypes=ChaosBuff   ; Phobos effect: animation / tint / stacking / discard rules
+AggressiveStance.Duration=150        ; this DLL: the aggressive behaviour, same length as the effect
+AggressiveStance.AffectsHouses=owner,allies
+```
 
-AggressiveStance.AffectsHouse= owner, allies, enemies, neutral, all, none
+Both fire from one hit, using only public INI — no Phobos modification and no version-fragile
+interop. This composition is the intended way to drive aggressive stance from an AttachEffect.
 
 # YRAggressiveStance
 An engine extension that enables Aggressive Stance for Yuri's Revenge.
