@@ -64,33 +64,29 @@ DEFINE_HOOK(0x6EA500, TeamClass_AddMember_AggressiveStance, 0x7)
 // ---------------------------------------------------------------------------
 // Hook: TeamClass::LiberateMember (0x6EA870)
 // Called when a unit leaves or is removed from a team.
-// Clear the aggressive stance map entry ONLY if the unit's stance came from
-// the team (i.e. the unit's TechnoType doesn't have AggressiveStance.Always).
 // ECX = TeamClass* (thiscall), stack arg 1 = FootClass* pFoot
 // Prologue: 51 55 8B 6C 24 0C = push ecx; push ebp; mov ebp,[esp+0xC]
 //           -> 6 stolen bytes land on an instruction boundary (OK).
+//
+// IMPORTANT: the engine calls this during team teardown with a FREED/garbage
+// `this` (ECX) whose memory has already been reused (observed crash: ECX =
+// 0x42555100, reused string bytes; C0000005 reading pTeam->Type). A non-null
+// check does NOT prove ECX is a live TeamClass, so pTeam must not be
+// dereferenced here. We don't need it: a unit leaving a team should drop its
+// team-granted stance regardless of which team it was, and the only thing that
+// must survive is the type-side AggressiveStance.Always. pFoot is valid (the
+// engine dereferences it two instructions later). Erasing the map entry (rather
+// than setting false) also avoids default-inserting a stale key.
 // ---------------------------------------------------------------------------
 
 #include <Ext/TechnoType/Body.h>
 
 DEFINE_HOOK(0x6EA870, TeamClass_LiberateMember_AggressiveStance, 0x6)
 {
-    GET(TeamClass*,  pTeam, ECX);
     GET_STACK(FootClass*, pFoot, 0x4);
 
-    if (pTeam && pFoot && pTeam->Type)
-    {
-        if (TeamTypeExt::IsAggressiveStance(pTeam->Type))
-        {
-            // Don't clear if the unit has AggressiveStance.Always=yes on its type —
-            // that flag is independent of team membership.
-            TechnoTypeClass* pTechnoType = pFoot->GetTechnoType();
-            if (!TechnoTypeExt::IsAlwaysAggressiveStance(pTechnoType))
-            {
-                AggressiveStanceClass::AggressiveStanceMap[pFoot] = false;
-            }
-        }
-    }
+    if (pFoot && !TechnoTypeExt::IsAlwaysAggressiveStance(pFoot->GetTechnoType()))
+        AggressiveStanceClass::AggressiveStanceMap.erase(pFoot);
 
     return 0;
 }

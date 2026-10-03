@@ -6,9 +6,32 @@
 #include <Ext/Event/Body.h>
 #include <Ext/TechnoType/Body.h>
 #include <Utilities/GeneralUtils.h>
+#include <Helpers/Macro.h>
 
 std::map<TechnoClass*, bool> AggressiveStanceClass::AggressiveStanceMap;
 std::map<TechnoClass*, int>  AggressiveStanceClass::GrantExpiry;
+
+// ---------------------------------------------------------------------------
+// Hook: AnnounceInvalidPointer (0x7258D0)
+// The engine fires this for every AbstractClass pointer that is about to become
+// invalid (object destroyed). Both of our pointer-keyed maps are written with
+// operator[] and would otherwise accumulate dead keys for the whole match, and
+// a new object reusing a freed address would inherit the previous occupant's
+// stance. Erase the pointer from both maps here (erase is a no-op if absent, so
+// this is safe for non-Techno pointers too). Antares/Ares/Phobos all co-hook
+// this address as observers, so returning 0 and chaining is load-order safe.
+// ECX = invalidated pointer. Stolen: 51 53 55 56 8B F1 (6 bytes), resume 0x7258D6.
+// ---------------------------------------------------------------------------
+
+DEFINE_HOOK(0x7258D0, YRAggressiveStance_AnnounceInvalidPointer, 0x6)
+{
+    GET(TechnoClass* const, pInvalid, ECX);
+
+    AggressiveStanceClass::AggressiveStanceMap.erase(pInvalid);
+    AggressiveStanceClass::GrantExpiry.erase(pInvalid);
+
+    return 0;
+}
 
 bool AggressiveStanceClass::IsGrantActive(TechnoClass* pTechno)
 {
