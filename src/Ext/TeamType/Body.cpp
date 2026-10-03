@@ -34,6 +34,28 @@ bool TeamTypeExt::IsAggressiveStance(TeamTypeClass* pType)
     return false;
 }
 
+// A non-null TeamClass* is not necessarily a LIVE one — see the LiberateMember
+// note below, where the engine passes a freed/garbage team during teardown.
+// Confirm the pointer is a currently-registered team (scan the active Count of
+// TeamClass::Array, not Capacity) before trusting it enough to dereference.
+static bool IsLiveTeam(TeamClass* pTeam)
+{
+    if (!pTeam)
+        return false;
+
+    // Explicit pointer type (not auto): constant_ptr's copy ctor is deleted, so
+    // this takes its operator-> / conversion to the live array at 0x8B40E8.
+    DynamicVectorClass<TeamClass*>* const pArray = TeamClass::Array;
+    if (!pArray)
+        return false;
+
+    for (int i = 0; i < pArray->Count; ++i)
+        if (pArray->Items[i] == pTeam)
+            return true;
+
+    return false;
+}
+
 // ---------------------------------------------------------------------------
 // Hook: TeamClass::AddMember (0x6EA500)
 // Called when a FootClass unit is assigned to a team.
@@ -43,6 +65,8 @@ bool TeamTypeExt::IsAggressiveStance(TeamTypeClass* pType)
 // Prologue: 53 56 57 8B 7C 24 10 = push ebx; push esi; push edi;
 //           mov edi,[esp+0x10]   -> must steal 7 bytes (6 cuts the mov,
 //           leaving 0x10 to execute as a stray opcode and crash the game).
+// This path runs during live recruitment (team is valid), but we validate pTeam
+// via IsLiveTeam() anyway as defence-in-depth against a stale team pointer.
 // ---------------------------------------------------------------------------
 
 DEFINE_HOOK(0x6EA500, TeamClass_AddMember_AggressiveStance, 0x7)
@@ -50,13 +74,8 @@ DEFINE_HOOK(0x6EA500, TeamClass_AddMember_AggressiveStance, 0x7)
     GET(TeamClass*,  pTeam, ECX);
     GET_STACK(FootClass*, pFoot, 0x4);
 
-    if (pTeam && pFoot && pTeam->Type)
-    {
-        if (TeamTypeExt::IsAggressiveStance(pTeam->Type))
-        {
-            AggressiveStanceClass::AggressiveStanceMap[pFoot] = true;
-        }
-    }
+    if (pFoot && IsLiveTeam(pTeam) && TeamTypeExt::IsAggressiveStance(pTeam->Type))
+        AggressiveStanceClass::AggressiveStanceMap[pFoot] = true;
 
     return 0;
 }
