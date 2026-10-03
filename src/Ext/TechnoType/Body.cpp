@@ -11,6 +11,8 @@
 std::map<TechnoTypeClass*, bool> TechnoTypeExt::AggressiveStanceAlwaysMap;
 std::map<TechnoTypeClass*, bool> TechnoTypeExt::AggressiveStanceExemptMap;
 std::map<TechnoTypeClass*, int>  TechnoTypeExt::AggressiveStanceTogglableMap;
+std::map<TechnoTypeClass*, bool> TechnoTypeExt::AggressiveStanceVeteranMap;
+std::map<TechnoTypeClass*, bool> TechnoTypeExt::AggressiveStanceEliteMap;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -50,6 +52,38 @@ bool TechnoTypeExt::IsExemptFromAggressiveStance(TechnoTypeClass* pType)
             val = pINI->ReadBool(pType->ID, "AggressiveStance.Exempt", false);
 
     AggressiveStanceExemptMap[pType] = val;
+    return val;
+}
+
+bool TechnoTypeExt::IsAggressiveWhenVeteran(TechnoTypeClass* pType)
+{
+    if (!pType) return false;
+    auto it = AggressiveStanceVeteranMap.find(pType);
+    if (it != AggressiveStanceVeteranMap.end())
+        return it->second;
+
+    bool val = false;
+    if (auto* pINI = GetRulesINI())
+        if (pType->ID)
+            val = pINI->ReadBool(pType->ID, "AggressiveStance.Veteran", false);
+
+    AggressiveStanceVeteranMap[pType] = val;
+    return val;
+}
+
+bool TechnoTypeExt::IsAggressiveWhenElite(TechnoTypeClass* pType)
+{
+    if (!pType) return false;
+    auto it = AggressiveStanceEliteMap.find(pType);
+    if (it != AggressiveStanceEliteMap.end())
+        return it->second;
+
+    bool val = false;
+    if (auto* pINI = GetRulesINI())
+        if (pType->ID)
+            val = pINI->ReadBool(pType->ID, "AggressiveStance.Elite", false);
+
+    AggressiveStanceEliteMap[pType] = val;
     return val;
 }
 

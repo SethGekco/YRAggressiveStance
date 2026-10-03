@@ -2,11 +2,89 @@
 #include <EventClass.h>
 #include <HouseClass.h>
 #include <InfantryTypeClass.h>
+#include <Fundamentals.h>
 #include <Ext/Event/Body.h>
 #include <Ext/TechnoType/Body.h>
 #include <Utilities/GeneralUtils.h>
+#include <Helpers/Macro.h>
 
 std::map<TechnoClass*, bool> AggressiveStanceClass::AggressiveStanceMap;
+std::map<TechnoClass*, int>  AggressiveStanceClass::GrantExpiry;
+
+// ---------------------------------------------------------------------------
+// Hook: AnnounceInvalidPointer (0x7258D0)
+// The engine fires this for every AbstractClass pointer that is about to become
+// invalid (object destroyed). Both of our pointer-keyed maps are written with
+// operator[] and would otherwise accumulate dead keys for the whole match, and
+// a new object reusing a freed address would inherit the previous occupant's
+// stance. Erase the pointer from both maps here (erase is a no-op if absent, so
+// this is safe for non-Techno pointers too). Antares/Ares/Phobos all co-hook
+// this address as observers, so returning 0 and chaining is load-order safe.
+// ECX = invalidated pointer. Stolen: 51 53 55 56 8B F1 (6 bytes), resume 0x7258D6.
+// ---------------------------------------------------------------------------
+
+DEFINE_HOOK(0x7258D0, YRAggressiveStance_AnnounceInvalidPointer, 0x6)
+{
+    GET(TechnoClass* const, pInvalid, ECX);
+
+    AggressiveStanceClass::AggressiveStanceMap.erase(pInvalid);
+    AggressiveStanceClass::GrantExpiry.erase(pInvalid);
+
+    return 0;
+}
+
+bool AggressiveStanceClass::IsGrantActive(TechnoClass* pTechno)
+{
+    auto it = GrantExpiry.find(pTechno);
+    if (it == GrantExpiry.end())
+        return false;
+
+    if (it->second == -1)               // indefinite
+        return true;
+
+    if (Unsorted::CurrentFrame < it->second)
+        return true;
+
+    GrantExpiry.erase(it);              // expired — prune
+    return false;
+}
+
+void AggressiveStanceClass::ApplyGrant(TechnoClass* pTechno, int duration, bool cumulative)
+{
+    if (!pTechno)
+        return;
+
+    if (duration == 0)                  // clear / turn off
+    {
+        GrantExpiry.erase(pTechno);
+        return;
+    }
+
+    if (duration < 0)                   // forever
+    {
+        GrantExpiry[pTechno] = -1;
+        return;
+    }
+
+    const int now = Unsorted::CurrentFrame;
+
+    if (cumulative)
+    {
+        auto it = GrantExpiry.find(pTechno);
+        if (it != GrantExpiry.end())
+        {
+            if (it->second == -1)       // already indefinite — leave it
+                return;
+
+            // Extend from whichever is later: the current expiry or now.
+            const int base = it->second > now ? it->second : now;
+            GrantExpiry[pTechno] = base + duration;
+            return;
+        }
+    }
+
+    GrantExpiry[pTechno] = now + duration;   // set / overwrite
+}
 
 const char* AggressiveStanceClass::GetName() const
 {
