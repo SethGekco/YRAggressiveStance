@@ -42,11 +42,11 @@ bool AggressiveStanceClass::IsGrantActive(TechnoClass* pTechno)
     if (it->second == -1)               // indefinite
         return true;
 
-    if (Unsorted::CurrentFrame < it->second)
-        return true;
-
-    GrantExpiry.erase(it);              // expired — prune
-    return false;
+    // An expired entry stays (reading it never writes: PerfExt's lane 3 may
+    // run the target checks that call this on several threads at once). It
+    // reads as inactive, ApplyGrant treats it like no entry, and it goes when
+    // the techno does (AnnounceInvalidPointer) or a grant replaces it.
+    return Unsorted::CurrentFrame < it->second;
 }
 
 void AggressiveStanceClass::ApplyGrant(TechnoClass* pTechno, int duration, bool cumulative)

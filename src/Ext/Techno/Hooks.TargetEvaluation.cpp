@@ -23,12 +23,16 @@ struct WeaponHealthFilter
 };
 
 static std::map<WeaponTypeClass*, WeaponHealthFilter> WeaponHealthFilterCache;
+static bool PrewarmingWeapons = false;
 
 static const WeaponHealthFilter& GetWeaponHealthFilter(WeaponTypeClass* pWeapon)
 {
     auto it = WeaponHealthFilterCache.find(pWeapon);
     if (it != WeaponHealthFilterCache.end())
         return it->second;
+
+    if (!PrewarmingWeapons)
+        PrewarmVerify::Miss("CanTarget.MaxHealth/MinHealth", pWeapon ? pWeapon->ID : nullptr);
 
     WeaponHealthFilter filter;
     if (CCINIClass* pINI = CCINIClass::INI_Rules)
@@ -60,11 +64,16 @@ static bool PassesHealthFilter(WeaponTypeClass* pWeapon, TechnoClass* pTarget)
 // True if this specific techno is aggressive for any reason that travels with
 // it: the hotkey/team map, a warhead grant, an Always type, a veteran/elite
 // rank tag, or an aggressive country.
+// Reads only, never adds to a map (the type maps are prewarmed): PerfExt's
+// lane 3 may run these target checks on several threads at once.
 static bool IsSelfAggressive(TechnoClass* p)
 {
     if (!p) return false;
 
-    if (AggressiveStanceClass::AggressiveStanceMap[p])
+    // find, not operator[]: a techno missing from the map isn't aggressive,
+    // and operator[] would add it.
+    auto const it = AggressiveStanceClass::AggressiveStanceMap.find(p);
+    if (it != AggressiveStanceClass::AggressiveStanceMap.end() && it->second)
         return true;
     if (AggressiveStanceClass::IsGrantActive(p))
         return true;
@@ -234,19 +243,28 @@ DEFINE_HOOK(0x6F84A9, TechnoClass_EvaluateObject_AggressiveStance_Vehicles, 0x8)
 // values before any CanFire call can read from it, preventing the cache
 // poisoning that occurred when GetWeaponHealthFilter was called lazily
 // from inside CanFire (where INI_Rules may not yet have scenario data).
+// The techno type and country tag maps are pre-warmed here too, so the
+// target checks only read them. 0x668F6A is the end of RulesClass::Process,
+// which runs for rulesmd.ini at startup and for each map's own rules.
 // Stolen bytes: A1 38 B2 A8 00 (5 bytes) = MOV EAX,[0xA8B238]
 // ---------------------------------------------------------------------------
 
 DEFINE_HOOK(0x668F6A, RulesData_InitializeAfterAllLoaded_PreWarmWeaponCache, 0x5)
 {
+    PrewarmVerify::Start();
+    TechnoTypeExt::Prewarm();
+    HouseTypeExt::Prewarm();
+
     WeaponHealthFilterCache.clear();
 
+    PrewarmingWeapons = true;
     for (int i = 0; i < WeaponTypeClass::Array->Count; i++)
     {
         WeaponTypeClass* pWeapon = WeaponTypeClass::Array->Items[i];
         if (pWeapon)
             GetWeaponHealthFilter(pWeapon); // populates cache entry
     }
+    PrewarmingWeapons = false;
 
     return 0;
 }

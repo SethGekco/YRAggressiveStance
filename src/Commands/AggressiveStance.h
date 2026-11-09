@@ -19,8 +19,8 @@ public:
 	// clobber each other.
 	static std::map<TechnoClass*, int> GrantExpiry;
 
-	// True if pTechno currently has an unexpired warhead grant. Expired entries
-	// are pruned on read.
+	// True if pTechno currently has an unexpired warhead grant. Only reads:
+	// an expired entry stays until the techno dies or gets a new grant.
 	static bool IsGrantActive(TechnoClass* pTechno);
 
 	// Applies a warhead grant. duration: -1 = forever, 0 = clear/off, >0 = frames.

@@ -8,8 +8,9 @@
 class TechnoTypeExt
 {
 public:
-    // Cache maps — keyed on TechnoTypeClass*, populated lazily on first
-    // encounter during gameplay. Absence from a map means the default applies.
+    // Cache maps — keyed on TechnoTypeClass*, filled for every type by
+    // Prewarm(); a type made after it is read on first encounter. Absence
+    // from a map means the default applies.
 
     // AggressiveStance.Always=yes  (on attacker type)
     // Units of this type are permanently in aggressive stance regardless of
@@ -41,4 +42,23 @@ public:
 
     static bool IsAggressiveWhenVeteran(TechnoTypeClass* pType);
     static bool IsAggressiveWhenElite(TechnoTypeClass* pType);
+
+    // Clears the maps and reads every tag above for every type in
+    // TechnoTypeClass::Array. Called at the end of each RulesClass::Process
+    // (0x668F6A), after the map's own rules, so the lookups during a game
+    // only read the maps: PerfExt's lane 3 may run the target checks that
+    // make them on several threads at once.
+    static void Prewarm();
 };
+
+// YRAS_VERIFY_PREWARM=1 in the game's environment (test runs only): the 1st,
+// 2nd, 4th, ... cached lookup after a prewarm re-reads every prewarmed tag
+// from INI_Rules, as the old code read a tag at its type's first lookup, and
+// logs any difference; a lookup that misses the cache is logged too.
+namespace PrewarmVerify
+{
+    extern bool On;
+    void Start();  // at each prewarm: reads the switch, restarts the count
+    void Lookup();  // call only when On
+    void Miss(const char* what, const char* id);
+}

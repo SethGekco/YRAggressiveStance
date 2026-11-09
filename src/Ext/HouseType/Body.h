@@ -14,4 +14,11 @@ public:
 
     // Returns true if pType's country section has AggressiveStance=yes.
     static bool IsAggressiveStance(HouseTypeClass* pType);
+
+    // The tag as INI_Rules has it, without the map.
+    static bool ReadAggressiveStance(HouseTypeClass* pType);
+
+    // Clears the map and reads the tag for every country in
+    // HouseTypeClass::Array; see TechnoTypeExt::Prewarm.
+    static void Prewarm();
 };
